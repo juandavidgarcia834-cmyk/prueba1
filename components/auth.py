@@ -5,6 +5,7 @@ import streamlit as st
 
 from config.constants import _DATOS_LECHE
 from db.supabase_client import init_connection
+from utils.input_utils import activar_siguiente_con_enter
 
 
 def render_login(ql_logo_crop_b64: str, nestle_logo_b64: str):
@@ -52,6 +53,7 @@ def render_login(ql_logo_crop_b64: str, nestle_logo_b64: str):
             _li_submitted = st.form_submit_button(
                 "Iniciar Sesión", type="primary", use_container_width=True
             )
+        activar_siguiente_con_enter()
 
         if _li_submitted:
             try:
