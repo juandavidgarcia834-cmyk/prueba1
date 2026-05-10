@@ -21,9 +21,9 @@ def validar_placa():
 
 
 def activar_siguiente_con_enter():
-    if st.session_state.get("_nav_js_ok"):
-        return
-    st.session_state["_nav_js_ok"] = True
+    # Sin guard de Python: st.html() se renderiza en CADA render para que
+    # el árbol de widgets sea estable entre reruns. El guard JavaScript
+    # (window._navInstalled) impide que los listeners se dupliquen.
     st.html(
         """
         <script>
@@ -58,18 +58,35 @@ def activar_siguiente_con_enter():
             return r.width > 0 && r.height > 0;
           }
 
-          // Devuelve el tab panel que contiene el elemento activo,
-          // o el documento completo si no hay tabs activos.
+          // Devuelve el tab panel activo que contiene el elemento,
+          // o el documento completo si no hay tab.
           function getScopeDeEl(el) {
             if (!el || !el.closest) return document;
-            var panel = el.closest('[data-testid="stTabPanel"]')
-                     || el.closest('[role="tabpanel"]');
-            return panel || document;
+            return el.closest('[data-testid="stTabPanel"]')
+                || el.closest('[data-testid="stTabsPanel"]')
+                || el.closest('[role="tabpanel"]')
+                || document;
+          }
+
+          // Verifica visibilidad real incluyendo visibility:hidden y display:none.
+          function esVisible(el) {
+            if (el.offsetParent === null) return false;
+            var cs = window.getComputedStyle(el);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+            var r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
           }
 
           function clickBtnGuardar() {
             var scope = getScopeDeEl(document.activeElement);
-            var vis = function(b) { return b.offsetParent !== null && b.innerText; };
+            var vis = function(b) {
+              if (!b.innerText) return false;
+              if (b.offsetParent === null) return false;
+              var cs = window.getComputedStyle(b);
+              if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+              var r = b.getBoundingClientRect();
+              return r.width > 0 && r.height > 0;
+            };
             var btns = Array.from(scope.querySelectorAll('button'));
             var btn = btns.find(function(b) { return vis(b) && b.innerText.includes('AGREGAR MUESTRA'); })
                   || btns.find(function(b) { return vis(b) && b.innerText.includes('GUARDAR'); });
@@ -82,8 +99,7 @@ def activar_siguiente_con_enter():
               if (!esFormInput(el)) return false;
               var t = el.getAttribute('type');
               if (t === 'hidden' || t === 'checkbox' || t === 'radio') return false;
-              var r = el.getBoundingClientRect();
-              return r.width > 0 && r.height > 0;
+              return esVisible(el);
             });
           }
 

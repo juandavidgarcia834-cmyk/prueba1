@@ -179,7 +179,6 @@ for _sk, _sv in [
     ("_sidebar_close", False),
     ("_logged_in", False), ("_rol_usuario", ""), ("_usuario_login", ""),
     ("_nombre_usuario", ""), ("_dato_leche", ""), ("_just_logged_in", False),
-    ("_nav_js_ok", False),
 ]:
     if _sk not in st.session_state:
         st.session_state[_sk] = _sv
