@@ -328,14 +328,16 @@ def render_seguimientos():
                              key=f"btn_agregar_muestra_{_ti}"):
                     st.session_state[_acomp_key].append({
                         "ID": seg_id_muestra or "",
-                        "VOLUMEN (L)": int(seg_volumen) if seg_volumen is not None else "",
-                        "GRASA (%)": f"{seg_grasa:.2f}" if seg_grasa is not None else "",
-                        "ST (%)":    f"{seg_st:.2f}"    if seg_st    is not None else "",
-                        "IC (°C)":   f"{seg_ic:.3f}"    if seg_ic    is not None else "",
-                        "AGUA (%)":  f"{seg_agua:.2f}"  if seg_agua  is not None else "",
-                        "ALCOHOL":   seg_alcohol, "CLORUROS": seg_cloruros,
+                        "VOLUMEN (L)": seg_volumen,
+                        "GRASA (%)":    seg_grasa,
+                        "ST (%)":       seg_st,
+                        "PROTEÍNA (%)": seg_proteina,
+                        "IC (°C)":      f"{seg_ic:.3f}" if seg_ic is not None else "",
+                        "AGUA (%)":     seg_agua,
+                        "ALCOHOL":      seg_alcohol,
+                        "CLORUROS":     seg_cloruros,
                         "NEUTRALIZANTES": seg_neutralizantes,
-                        "OBS":       seg_observaciones or "",
+                        "OBS":          seg_observaciones or "",
                         "_volumen": seg_volumen,
                         "_grasa": seg_grasa, "_st": seg_st, "_ic": seg_ic,
                         "_proteina": seg_proteina,
@@ -353,18 +355,85 @@ def render_seguimientos():
                            </div>""",
                         unsafe_allow_html=True,
                     )
-                    _cat_pa  = load_catalogo()
+                    _cat_pa     = load_catalogo()
                     _cat_pa_map = dict(zip(_cat_pa["codigo"], _cat_pa["nombre"]))
                     _rows_pa = []
-                    for m in st.session_state[_acomp_key]:
-                        _cod_pa = str(m.get("ID", "") or "").strip()
-                        _nom_pa = _cat_pa_map.get(_cod_pa, "")
-                        _row_pa = {"ID": _cod_pa, "NOMBRE ESTACIÓN": _nom_pa}
-                        _row_pa.update({k: v for k, v in m.items()
-                                        if not k.startswith("_") and k != "ID"})
-                        _rows_pa.append(_row_pa)
+                    for _m in st.session_state[_acomp_key]:
+                        _cod_pa = str(_m.get("ID", "") or "").strip()
+                        _rows_pa.append({
+                            "ID":             _cod_pa,
+                            "NOMBRE ESTACIÓN": _cat_pa_map.get(_cod_pa, ""),
+                            "VOLUMEN (L)":    _m.get("VOLUMEN (L)"),
+                            "GRASA (%)":      _m.get("GRASA (%)"),
+                            "ST (%)":         _m.get("ST (%)"),
+                            "PROTEÍNA (%)":   _m.get("PROTEÍNA (%)"),
+                            "IC (°C)":        _m.get("IC (°C)", ""),
+                            "AGUA (%)":       _m.get("AGUA (%)"),
+                            "ALCOHOL":        _m.get("ALCOHOL", "N/A"),
+                            "CLORUROS":       _m.get("CLORUROS", "N/A"),
+                            "NEUTRALIZANTES": _m.get("NEUTRALIZANTES", "N/A"),
+                            "OBS":            _m.get("OBS", ""),
+                        })
                     df_prev_a = pd.DataFrame(_rows_pa)
-                    st.dataframe(df_prev_a, width='stretch', hide_index=True)
+                    _acomp_de_key = f"de_acomp_{_ti}_{len(st.session_state[_acomp_key])}"
+                    _edited_a = st.data_editor(
+                        df_prev_a,
+                        num_rows="dynamic",
+                        width='stretch',
+                        hide_index=True,
+                        key=_acomp_de_key,
+                        column_config={
+                            "ID":             st.column_config.TextColumn("ID"),
+                            "NOMBRE ESTACIÓN": st.column_config.TextColumn("NOMBRE ESTACIÓN", disabled=True),
+                            "VOLUMEN (L)":    st.column_config.NumberColumn("VOLUMEN (L)", format="%d", min_value=0, step=1),
+                            "GRASA (%)":      st.column_config.NumberColumn("GRASA (%)", format="%.2f", min_value=0.0, max_value=100.0),
+                            "ST (%)":         st.column_config.NumberColumn("ST (%)", format="%.2f", min_value=0.0, max_value=100.0),
+                            "PROTEÍNA (%)":   st.column_config.NumberColumn("PROTEÍNA (%)", format="%.2f", min_value=0.0, max_value=100.0),
+                            "IC (°C)":        st.column_config.TextColumn("IC (°C)"),
+                            "AGUA (%)":       st.column_config.NumberColumn("AGUA (%)", format="%.2f", min_value=0.0, max_value=100.0),
+                            "ALCOHOL":        st.column_config.SelectboxColumn("ALCOHOL", options=["N/A", "NEGATIVO (−)", "POSITIVO (+)"], required=True),
+                            "CLORUROS":       st.column_config.SelectboxColumn("CLORUROS", options=["N/A", "NEGATIVO (−)", "POSITIVO (+)"], required=True),
+                            "NEUTRALIZANTES": st.column_config.SelectboxColumn("NEUTRALIZANTES", options=["N/A", "NEGATIVO (−)", "POSITIVO (+)"], required=True),
+                            "OBS":            st.column_config.TextColumn("OBS"),
+                        },
+                    )
+                    def _pn(x):
+                        try:
+                            return float(str(x).replace(",", ".")) if x is not None and str(x).strip() not in ("", "None", "nan") else None
+                        except Exception:
+                            return None
+                    _synced = []
+                    for _r in _edited_a.to_dict(orient="records"):
+                        if all(str(_r.get(c, "")).strip() in ("", "None", "nan")
+                               for c in ["ID", "VOLUMEN (L)", "GRASA (%)", "ST (%)",
+                                         "PROTEÍNA (%)", "IC (°C)", "OBS"]):
+                            continue
+                        _ic_s = str(_r.get("IC (°C)") or "").strip()
+                        _ic_n = _pn(_ic_s) if _ic_s not in ("", "-", "-0", "-0.") else None
+                        _synced.append({
+                            "ID":             str(_r.get("ID") or "").strip(),
+                            "VOLUMEN (L)":    _pn(_r.get("VOLUMEN (L)")),
+                            "GRASA (%)":      _pn(_r.get("GRASA (%)")),
+                            "ST (%)":         _pn(_r.get("ST (%)")),
+                            "PROTEÍNA (%)":   _pn(_r.get("PROTEÍNA (%)")),
+                            "IC (°C)":        _ic_s,
+                            "AGUA (%)":       _pn(_r.get("AGUA (%)")),
+                            "ALCOHOL":        _r.get("ALCOHOL") or "N/A",
+                            "CLORUROS":       _r.get("CLORUROS") or "N/A",
+                            "NEUTRALIZANTES": _r.get("NEUTRALIZANTES") or "N/A",
+                            "OBS":            str(_r.get("OBS") or ""),
+                            "_volumen":       _pn(_r.get("VOLUMEN (L)")),
+                            "_grasa":         _pn(_r.get("GRASA (%)")),
+                            "_st":            _pn(_r.get("ST (%)")),
+                            "_proteina":      _pn(_r.get("PROTEÍNA (%)")),
+                            "_ic":            _ic_n,
+                            "_agua":          _pn(_r.get("AGUA (%)")),
+                            "_alcohol":       _r.get("ALCOHOL") or "N/A",
+                            "_cloruros":      _r.get("CLORUROS") or "N/A",
+                            "_neutralizantes": _r.get("NEUTRALIZANTES") or "N/A",
+                            "_obs":           str(_r.get("OBS") or ""),
+                        })
+                    st.session_state[_acomp_key] = _synced
 
             if _sub == "ACOMPAÑAMIENTOS":
                 seg_vol_declarado = seg_vol_declarado_id
