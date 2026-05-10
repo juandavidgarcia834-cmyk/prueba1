@@ -22,8 +22,10 @@ def validar_placa():
 
 def activar_siguiente_con_enter():
     # Sin guard de Python: st.html() se renderiza en CADA render para que
-    # el árbol de widgets sea estable entre reruns. El guard JavaScript
-    # (window._navInstalled) impide que los listeners se dupliquen.
+    # el árbol de widgets sea estable entre reruns (un st.html() ausente
+    # desplaza las claves auto-generadas de todos los widgets siguientes,
+    # incluyendo st.tabs(), lo que causa que React los remonte y reinicie al tab 0).
+    # El guard JavaScript (window._navInstalled) impide listeners duplicados.
     st.html(
         """
         <script>
@@ -31,6 +33,7 @@ def activar_siguiente_con_enter():
           if (window._navInstalled) return;
           window._navInstalled = true;
 
+          /* ── Selectores de widgets Streamlit ─────────────────────── */
           var ST_FORM = [
             '[data-testid="stTextInput"]',
             '[data-testid="stNumberInput"]',
@@ -58,17 +61,7 @@ def activar_siguiente_con_enter():
             return r.width > 0 && r.height > 0;
           }
 
-          // Devuelve el tab panel activo que contiene el elemento,
-          // o el documento completo si no hay tab.
-          function getScopeDeEl(el) {
-            if (!el || !el.closest) return document;
-            return el.closest('[data-testid="stTabPanel"]')
-                || el.closest('[data-testid="stTabsPanel"]')
-                || el.closest('[role="tabpanel"]')
-                || document;
-          }
-
-          // Verifica visibilidad real incluyendo visibility:hidden y display:none.
+          /* ── Visibilidad real del elemento ───────────────────────── */
           function esVisible(el) {
             if (el.offsetParent === null) return false;
             var cs = window.getComputedStyle(el);
@@ -77,8 +70,8 @@ def activar_siguiente_con_enter():
             return r.width > 0 && r.height > 0;
           }
 
+          /* ── Botón GUARDAR dentro del panel activo ───────────────── */
           function clickBtnGuardar() {
-            var scope = getScopeDeEl(document.activeElement);
             var vis = function(b) {
               if (!b.innerText) return false;
               if (b.offsetParent === null) return false;
@@ -87,15 +80,15 @@ def activar_siguiente_con_enter():
               var r = b.getBoundingClientRect();
               return r.width > 0 && r.height > 0;
             };
-            var btns = Array.from(scope.querySelectorAll('button'));
+            var btns = Array.from(document.querySelectorAll('button'));
             var btn = btns.find(function(b) { return vis(b) && b.innerText.includes('AGREGAR MUESTRA'); })
                   || btns.find(function(b) { return vis(b) && b.innerText.includes('GUARDAR'); });
             if (btn) setTimeout(function() { btn.click(); }, 120);
           }
 
+          /* ── Inputs visibles en la página ────────────────────────── */
           function obtenerInputsVisibles() {
-            var scope = getScopeDeEl(document.activeElement);
-            return Array.from(scope.querySelectorAll('input,textarea')).filter(function(el) {
+            return Array.from(document.querySelectorAll('input,textarea')).filter(function(el) {
               if (!esFormInput(el)) return false;
               var t = el.getAttribute('type');
               if (t === 'hidden' || t === 'checkbox' || t === 'radio') return false;
@@ -111,6 +104,78 @@ def activar_siguiente_con_enter():
             if (dest) setTimeout(function() { dest.focus(); try { dest.select(); } catch(e) {} }, 60);
           }
 
+          /* ══════════════════════════════════════════════════════════
+             PRESERVACIÓN DE TAB ACTIVO ENTRE RERUNS DE STREAMLIT
+             ──────────────────────────────────────────────────────────
+             st.tabs() reinicia al tab 0 en cada rerun de Streamlit.
+             Guardamos el tab activo en sessionStorage y lo restauramos
+             automáticamente después de cada rerun via MutationObserver.
+          ══════════════════════════════════════════════════════════ */
+          var _qlTabKey    = '_ql_seg_tab';
+          var _qlRestTimer = null;
+          var _qlLocked    = false;   // evita restauraciones re-entrantes
+
+          function _qlGetSegTabs() {
+            /* Busca el grupo de tabs de SEGUIMIENTOS por sus etiquetas */
+            var all = Array.from(document.querySelectorAll('[data-testid="stTab"]'));
+            for (var i = 0; i < all.length; i++) {
+              var txt = (all[i].textContent || '').toUpperCase();
+              if (txt.includes('ESTACIONES') || txt.includes('ACOMP') || txt.includes('CONTRA')) {
+                /* Encontramos el primer tab del grupo; recogemos el contenedor */
+                var wrap = all[i].closest('[data-baseweb="tab-list"]')
+                        || all[i].closest('[role="tablist"]')
+                        || all[i].parentElement;
+                if (!wrap) return [];
+                return Array.from(wrap.querySelectorAll('[data-testid="stTab"]'));
+              }
+            }
+            return [];
+          }
+
+          function _qlActiveIdx(tabs) {
+            for (var i = 0; i < tabs.length; i++) {
+              if (tabs[i].getAttribute('aria-selected') === 'true') return i;
+            }
+            return 0;
+          }
+
+          function _qlSaveTab() {
+            var tabs = _qlGetSegTabs();
+            if (!tabs.length) return;
+            var idx = _qlActiveIdx(tabs);
+            sessionStorage.setItem(_qlTabKey, String(idx));
+          }
+
+          function _qlRestoreTab() {
+            if (_qlLocked) return;
+            var saved = sessionStorage.getItem(_qlTabKey);
+            if (saved === null) return;
+            var idx = parseInt(saved, 10);
+            if (idx === 0) return;          /* tab 0 es el default, no hace falta restaurar */
+            var tabs = _qlGetSegTabs();
+            if (!tabs.length || idx >= tabs.length) return;
+            var current = _qlActiveIdx(tabs);
+            if (current === idx) return;    /* ya estamos en el tab correcto */
+            _qlLocked = true;
+            tabs[idx].click();
+            setTimeout(function() { _qlLocked = false; }, 600);
+          }
+
+          /* Escuchar clics de usuario en los tabs → guardar índice */
+          document.addEventListener('click', function(e) {
+            if (!e.target || !e.target.closest) return;
+            var tab = e.target.closest('[data-testid="stTab"]');
+            if (tab) setTimeout(_qlSaveTab, 80);   /* esperar a que React actualice aria-selected */
+          }, true);
+
+          /* MutationObserver: detectar reruns de Streamlit y restaurar tab */
+          var _qlObserver = new MutationObserver(function() {
+            clearTimeout(_qlRestTimer);
+            _qlRestTimer = setTimeout(_qlRestoreTab, 200);
+          });
+          _qlObserver.observe(document.body, { childList: true, subtree: true });
+
+          /* ── Manejo de Data Editor (grilla) ──────────────────────── */
           var _inGrid = false;
 
           document.addEventListener('focusin', function(e) {
@@ -121,14 +186,14 @@ def activar_siguiente_con_enter():
             _inGrid = false; clickBtnGuardar();
           });
 
+          /* ── Navegación por teclado ───────────────────────────────── */
           document.addEventListener('keydown', function(e) {
             var a = document.activeElement;
             if (!a) return;
             var tag = a.tagName;
             if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
 
-            // No interceptar campos de contraseña: el formulario nativo
-            // de Streamlit se encarga de enviar en Enter.
+            /* No interceptar contraseñas: el form nativo de Streamlit maneja Enter */
             if ((a.getAttribute('type') || '') === 'password') return;
 
             if (esFormInput(a)) {
@@ -169,8 +234,9 @@ def activar_siguiente_con_enter():
               e.preventDefault(); e.stopPropagation(); tab(true);
             }
           }, true);
+
         })();
         </script>
         """,
-        unsafe_allow_javascript=True,
+        unsafe_allow_html=True,
     )
