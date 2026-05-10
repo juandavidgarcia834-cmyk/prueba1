@@ -14,6 +14,7 @@ from utils.data_utils import (
     delete_seg_rows, update_seg_row_in_csv,
 )
 from utils.excel_utils import historial_to_excel_filtrado
+from utils.file_utils import get_image_url
 from config.constants import CSV_COLS
 
 
@@ -782,18 +783,19 @@ def render_historial():
                             _ac_fotos_list = json.loads(_ac_fotos_raw)
                         except Exception:
                             _ac_fotos_list = []
-                        _ac_fotos_exist = [p for p in _ac_fotos_list if os.path.exists(p)]
-                        if _ac_fotos_exist:
+                        _ac_fotos_urls = [(_p, get_image_url(_p)) for _p in _ac_fotos_list if _p]
+                        _ac_fotos_urls = [(p, u) for p, u in _ac_fotos_urls if u]
+                        if _ac_fotos_urls:
                             st.markdown(
                                 "<div style='font-size:11px;font-weight:700;color:#0056A3;"
                                 "letter-spacing:.05em;margin:12px 0 6px;'>"
                                 "📷 IMÁGENES DE MUESTRAS</div>",
                                 unsafe_allow_html=True,
                             )
-                            _ac_cols_f = st.columns(min(len(_ac_fotos_exist), 4))
-                            for _afi, _afp in enumerate(_ac_fotos_exist):
+                            _ac_cols_f = st.columns(min(len(_ac_fotos_urls), 4))
+                            for _afi, (_afp, _afurl) in enumerate(_ac_fotos_urls):
                                 with _ac_cols_f[_afi % 4]:
-                                    st.image(_afp, width='stretch')
+                                    st.image(_afurl, width='stretch')
 
             elif _s_sub == "CONTRAMUESTRAS SOLICITADAS":
                 st.markdown("---")
@@ -990,18 +992,19 @@ def render_historial():
                             _ct_fotos_list = json.loads(_ct_fotos_raw)
                         except Exception:
                             _ct_fotos_list = []
-                        _ct_fotos_exist = [p for p in _ct_fotos_list if os.path.exists(p)]
-                        if _ct_fotos_exist:
+                        _ct_fotos_urls = [(_p, get_image_url(_p)) for _p in _ct_fotos_list if _p]
+                        _ct_fotos_urls = [(p, u) for p, u in _ct_fotos_urls if u]
+                        if _ct_fotos_urls:
                             st.markdown(
                                 "<div style='font-size:11px;font-weight:700;color:#0056A3;"
                                 "letter-spacing:.05em;margin:12px 0 6px;'>"
                                 "📷 IMÁGENES DE MUESTRAS</div>",
                                 unsafe_allow_html=True,
                             )
-                            _ct_cols_f = st.columns(min(len(_ct_fotos_exist), 4))
-                            for _cfi, _cfp in enumerate(_ct_fotos_exist):
+                            _ct_cols_f = st.columns(min(len(_ct_fotos_urls), 4))
+                            for _cfi, (_cfp, _cfurl) in enumerate(_ct_fotos_urls):
                                 with _ct_cols_f[_cfi % 4]:
-                                    st.image(_cfp, width='stretch')
+                                    st.image(_cfurl, width='stretch')
 
         if (sel_orig_idx is not None and filtro_tipo in ("RUTAS", "TODOS", "TRANSUIZA")
                 and st.session_state.hist_buscar_ok):
@@ -1410,13 +1413,14 @@ def render_historial():
                 if _fotos_raw and _fotos_raw not in ("[]", ""):
                     try:    _fotos_list = json.loads(_fotos_raw)
                     except: _fotos_list = []
-                    _fotos_existentes = [p for p in _fotos_list if os.path.exists(p)]
-                    if _fotos_existentes:
+                    _fotos_urls = [(_p, get_image_url(_p)) for _p in _fotos_list if _p]
+                    _fotos_urls = [(p, u) for p, u in _fotos_urls if u]
+                    if _fotos_urls:
                         st.markdown("<div style='font-size:11px;font-weight:700;color:#0056A3;letter-spacing:.05em;margin:10px 0 6px;'>📷 IMÁGENES DE MUESTRAS</div>", unsafe_allow_html=True)
-                        _cols_fotos = st.columns(min(len(_fotos_existentes), 4))
-                        for _fi, _fp in enumerate(_fotos_existentes):
+                        _cols_fotos = st.columns(min(len(_fotos_urls), 4))
+                        for _fi, (_fp, _furl) in enumerate(_fotos_urls):
                             with _cols_fotos[_fi % 4]:
-                                st.image(_fp, width='stretch')
+                                st.image(_furl, width='stretch')
 
         accion_activa  = st.session_state.get("admin_accion")
         idx_activo     = st.session_state.get("admin_idx")
