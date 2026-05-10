@@ -121,6 +121,26 @@ def activar_siguiente_con_enter():
             if (dest) setTimeout(function() { dest.focus(); try { dest.select(); } catch(e) {} }, 60);
           }
 
+          /* Busca el siguiente input visible que viene DESPUÉS del actual
+             en orden del DOM, sin depender de selectores de contenedor. */
+          function siguienteInput(actual) {
+            var cands = Array.from(document.querySelectorAll('input,textarea')).filter(function(el) {
+              if (el === actual) return false;
+              if (el.disabled || el.readOnly) return false;
+              var t = el.getAttribute('type');
+              if (t === 'hidden' || t === 'checkbox' || t === 'radio' ||
+                  t === 'submit' || t === 'button' || t === 'file') return false;
+              if (el.getAttribute('aria-hidden') === 'true') return false;
+              return esVisible(el);
+            });
+            for (var i = 0; i < cands.length; i++) {
+              if (actual.compareDocumentPosition(cands[i]) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                return cands[i];
+              }
+            }
+            return null;
+          }
+
           /* ══════════════════════════════════════════════════════════
              PRESERVACIÓN DE TAB ACTIVO ENTRE RERUNS DE STREAMLIT
              ──────────────────────────────────────────────────────────
@@ -223,9 +243,16 @@ def activar_siguiente_con_enter():
               if (e.key === 'Enter') {
                 e.preventDefault(); e.stopPropagation();
                 if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-                try { console.log('[QL_NAV] Enter: todos.length=', todos.length, 'pos=', pos, 'esUlt=', esUlt, 'activeType=', a.getAttribute('type')); } catch(_) {}
-                if (ph.includes('observaciones') || esUlt) clickBtnGuardar();
-                else moverFoco(a, 1);
+                if (ph.includes('observaciones')) {
+                  clickBtnGuardar();
+                } else {
+                  var dest = siguienteInput(a);
+                  if (dest) {
+                    setTimeout(function() { dest.focus(); try { dest.select(); } catch(_) {} }, 60);
+                  } else {
+                    clickBtnGuardar();
+                  }
+                }
               } else if (e.key === 'ArrowRight' && !esSel && (esNum || a.selectionStart >= a.value.length)) {
                 e.preventDefault(); e.stopPropagation(); moverFoco(a, 1);
               } else if (e.key === 'ArrowLeft' && !esSel && (esNum || a.selectionStart <= 0)) {
