@@ -38,16 +38,21 @@ def render_historial():
         unsafe_allow_html=True,
     )
 
+    # Limpia valores viejos de session_state que puedan persistir de versiones anteriores
+    for _dk in ("hist_desde", "hist_hasta"):
+        if _dk in st.session_state:
+            del st.session_state[_dk]
+
     ff1, ff2, _ = st.columns([2, 2, 4])
     with ff1:
         fecha_desde = st.date_input(
             "FECHA DESDE", value=None,
-            format="DD/MM/YYYY", key="hist_desde",
+            format="DD/MM/YYYY", key="hist_fecha_desde",
         )
     with ff2:
         fecha_hasta = st.date_input(
             "FECHA HASTA", value=None,
-            format="DD/MM/YYYY", key="hist_hasta",
+            format="DD/MM/YYYY", key="hist_fecha_hasta",
         )
 
     filtro_subtipo = "TODOS"
