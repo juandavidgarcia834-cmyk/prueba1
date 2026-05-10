@@ -57,15 +57,28 @@ def activar_siguiente_con_enter():
             var r = g.getBoundingClientRect();
             return r.width > 0 && r.height > 0;
           }
+
+          // Devuelve el tab panel que contiene el elemento activo,
+          // o el documento completo si no hay tabs activos.
+          function getScopeDeEl(el) {
+            if (!el || !el.closest) return document;
+            var panel = el.closest('[data-testid="stTabPanel"]')
+                     || el.closest('[role="tabpanel"]');
+            return panel || document;
+          }
+
           function clickBtnGuardar() {
+            var scope = getScopeDeEl(document.activeElement);
             var vis = function(b) { return b.offsetParent !== null && b.innerText; };
-            var btns = Array.from(document.querySelectorAll('button'));
+            var btns = Array.from(scope.querySelectorAll('button'));
             var btn = btns.find(function(b) { return vis(b) && b.innerText.includes('AGREGAR MUESTRA'); })
                   || btns.find(function(b) { return vis(b) && b.innerText.includes('GUARDAR'); });
             if (btn) setTimeout(function() { btn.click(); }, 120);
           }
+
           function obtenerInputsVisibles() {
-            return Array.from(document.querySelectorAll('input,textarea')).filter(function(el) {
+            var scope = getScopeDeEl(document.activeElement);
+            return Array.from(scope.querySelectorAll('input,textarea')).filter(function(el) {
               if (!esFormInput(el)) return false;
               var t = el.getAttribute('type');
               if (t === 'hidden' || t === 'checkbox' || t === 'radio') return false;
@@ -73,6 +86,7 @@ def activar_siguiente_con_enter():
               return r.width > 0 && r.height > 0;
             });
           }
+
           function moverFoco(input, delta) {
             var todos = obtenerInputsVisibles();
             var pos = todos.indexOf(input);

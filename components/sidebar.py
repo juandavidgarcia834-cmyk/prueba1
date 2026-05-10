@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as _stc
 
 from utils.time_utils import now_col
 from utils.draft_utils import clear_draft_state
@@ -194,7 +193,7 @@ def render_sidebar(ql_logo_b64: str):
 
     if st.session_state._sidebar_close:
         st.session_state._sidebar_close = False
-        _stc.html(
+        st.html(
             """<script>
             (function(){
                 var attempts = 0;
@@ -217,5 +216,5 @@ def render_sidebar(ql_logo_b64: str):
                 setTimeout(tryClose, 80);
             })();
             </script>""",
-            height=1,
+            unsafe_allow_javascript=True,
         )
