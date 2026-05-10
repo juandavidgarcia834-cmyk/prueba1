@@ -38,16 +38,15 @@ def render_historial():
         unsafe_allow_html=True,
     )
 
-    _hoy_col = now_col().date()
     ff1, ff2, _ = st.columns([2, 2, 4])
     with ff1:
         fecha_desde = st.date_input(
-            "FECHA DESDE", value=_hoy_col,
+            "FECHA DESDE", value=None,
             format="DD/MM/YYYY", key="hist_desde",
         )
     with ff2:
         fecha_hasta = st.date_input(
-            "FECHA HASTA", value=_hoy_col,
+            "FECHA HASTA", value=None,
             format="DD/MM/YYYY", key="hist_hasta",
         )
 
@@ -84,15 +83,20 @@ def render_historial():
             key="hist_codigo_seg",
         ).strip().upper()
 
+    _fechas_validas = (fecha_desde is not None and fecha_hasta is not None)
+
     _fbrow, _ = st.columns([1, 5])
     with _fbrow:
         if st.button("🔍 BUSCAR", type="primary",
                      key="btn_buscar_hist", width='stretch'):
-            st.session_state.hist_buscar_ok = True
-            st.rerun()
+            if _fechas_validas:
+                st.session_state.hist_buscar_ok = True
+                st.rerun()
+            else:
+                st.warning("⚠️ Debes seleccionar ambas fechas para buscar.")
 
-    if not st.session_state.hist_buscar_ok:
-        st.info("Selecciona los filtros y presiona **🔍 BUSCAR** para ver el historial.")
+    if not st.session_state.hist_buscar_ok or not _fechas_validas:
+        st.info("Selecciona el rango de fechas y presiona **🔍 BUSCAR** para ver el historial.")
         return
 
     # ── Carga de datos (solo tras presionar BUSCAR) ───────────────────────────
@@ -924,15 +928,16 @@ def render_historial():
                         _nom_v = _ct_cat_map.get(_cod_v, "")
                         _ct_view_rows.append({
                             "CÓDIGO": _cod_v, "NOMBRE ESTACIÓN": _nom_v,
-                            "PROVEEDOR": str(_mv.get("_proveedor","") or ""),
-                            "GRASA (%)": _pnv(_mv.get("_grasa")),
-                            "ST (%)":    _pnv(_mv.get("_st")),
-                            "IC (°C)":   _pnv(_mv.get("_ic")),
-                            "AGUA (%)":  _pnv(_mv.get("_agua")),
-                            "ALCOHOL":   str(_mv.get("_alcohol","N/A") or "N/A"),
-                            "CLORUROS":  str(_mv.get("_cloruros","N/A") or "N/A"),
+                            "PROVEEDOR":  str(_mv.get("_proveedor","") or ""),
+                            "GRASA (%)":  _pnv(_mv.get("_grasa")),
+                            "ST (%)":     _pnv(_mv.get("_st")),
+                            "PROT. (%)":  _pnv(_mv.get("_proteina")),
+                            "IC (°C)":    _pnv(_mv.get("_ic")),
+                            "AGUA (%)":   _pnv(_mv.get("_agua")),
+                            "ALCOHOL":    str(_mv.get("_alcohol","N/A") or "N/A"),
+                            "CLORUROS":   str(_mv.get("_cloruros","N/A") or "N/A"),
                             "NEUTRALIZANTES": str(_mv.get("_neutralizantes","N/A") or "N/A"),
-                            "OBS":       str(_mv.get("_obs","") or ""),
+                            "OBS":        str(_mv.get("_obs","") or ""),
                         })
                     if _ct_view_rows:
                         _df_ct_v = pd.DataFrame(_ct_view_rows)
@@ -955,7 +960,7 @@ def render_historial():
                                         styles[cols.index(_qc)] = _RED_CT
                                 except: pass
                             return styles
-                        _fmt_ct_v = {"GRASA (%)":"{:.2f}", "ST (%)":"{:.2f}", "IC (°C)":"{:.3f}", "AGUA (%)":"{:.2f}"}
+                        _fmt_ct_v = {"GRASA (%)":"{:.2f}", "ST (%)":"{:.2f}", "PROT. (%)":"{:.2f}", "IC (°C)":"{:.3f}", "AGUA (%)":"{:.2f}"}
                         st.dataframe(_df_ct_v.style.apply(_color_ct_v, axis=1).format(_fmt_ct_v, na_rep="—"),
                             width='stretch', hide_index=True,
                             height=min(38+35*len(_ct_view_rows), 420),
@@ -965,6 +970,7 @@ def render_historial():
                                 "PROVEEDOR":       st.column_config.TextColumn("PROVEEDOR",      width="medium"),
                                 "GRASA (%)":       st.column_config.NumberColumn("GRASA (%)",     width="small", format="%.2f"),
                                 "ST (%)":          st.column_config.NumberColumn("ST (%)",        width="small", format="%.2f"),
+                                "PROT. (%)":       st.column_config.NumberColumn("PROT. (%)",     width="small", format="%.2f"),
                                 "IC (°C)":         st.column_config.NumberColumn("IC (°C)",       width="small", format="%.3f"),
                                 "AGUA (%)":        st.column_config.NumberColumn("AGUA (%)",      width="small", format="%.2f"),
                                 "ALCOHOL":         st.column_config.TextColumn("ALC.",            width="small"),
@@ -972,6 +978,25 @@ def render_historial():
                                 "NEUTRALIZANTES":  st.column_config.TextColumn("NEUT.",           width="small"),
                                 "OBS":             st.column_config.TextColumn("OBSERVACIONES",   width="medium"),
                             })
+
+                    _ct_fotos_raw = str(_srow.get("fotos_json", "") or "").strip()
+                    if _ct_fotos_raw and _ct_fotos_raw not in ("[]", ""):
+                        try:
+                            _ct_fotos_list = json.loads(_ct_fotos_raw)
+                        except Exception:
+                            _ct_fotos_list = []
+                        _ct_fotos_exist = [p for p in _ct_fotos_list if os.path.exists(p)]
+                        if _ct_fotos_exist:
+                            st.markdown(
+                                "<div style='font-size:11px;font-weight:700;color:#0056A3;"
+                                "letter-spacing:.05em;margin:12px 0 6px;'>"
+                                "📷 IMÁGENES DE MUESTRAS</div>",
+                                unsafe_allow_html=True,
+                            )
+                            _ct_cols_f = st.columns(min(len(_ct_fotos_exist), 4))
+                            for _cfi, _cfp in enumerate(_ct_fotos_exist):
+                                with _ct_cols_f[_cfi % 4]:
+                                    st.image(_cfp, width='stretch')
 
         if (sel_orig_idx is not None and filtro_tipo in ("RUTAS", "TODOS", "TRANSUIZA")
                 and st.session_state.hist_buscar_ok):
