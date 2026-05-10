@@ -32,11 +32,6 @@ def render_historial():
         unsafe_allow_html=True,
     )
 
-    df_hist = load_historial()
-    if df_hist.empty:
-        st.info("No hay rutas guardadas aún. Complete el formulario y presione **GUARDAR RUTA** para registrar datos aquí.")
-        return
-
     st.markdown(
         "<div style='font-weight:600;color:#374151;margin-bottom:8px;'>"
         "🔍 Filtros de búsqueda</div>",
@@ -72,38 +67,22 @@ def render_historial():
                 key="hist_subtipo",
             )
 
-    _df_seg_src = load_seguimientos()
-    _rutas_rutas = (
-        df_hist["ruta"].dropna().replace("", pd.NA).dropna().unique().tolist()
-        if "ruta" in df_hist.columns else []
-    )
-    _rutas_segs = (
-        _df_seg_src["ruta"].dropna().replace("", pd.NA).dropna().unique().tolist()
-        if "ruta" in _df_seg_src.columns else []
-    )
-    rutas_unicas = ["TODAS"] + sorted(set(_rutas_rutas) | set(_rutas_segs))
-
-    _codigos_todos = (
-        ["TODOS"] + sorted(
-            _df_seg_src["seg_codigo"].dropna().replace("", pd.NA).dropna().unique().tolist()
-        )
-        if "seg_codigo" in _df_seg_src.columns else ["TODOS"]
-    )
-
-    placas_unicas = (
-        ["TODAS"] + sorted(
-            df_hist["placa"].dropna().replace("", pd.NA).dropna().unique().tolist()
-        )
-        if "placa" in df_hist.columns else ["TODAS"]
-    )
-
     fr1, fr2, fr3 = st.columns([2, 2, 2])
     with fr1:
-        filtro_ruta = st.selectbox("📍 RUTA", rutas_unicas, key="hist_ruta")
+        filtro_ruta = st.text_input(
+            "📍 RUTA", placeholder="Nombre de ruta…",
+            key="hist_ruta",
+        ).strip().upper()
     with fr2:
-        filtro_codigo = st.selectbox("🔖 CÓDIGO", _codigos_todos, key="hist_codigo_seg")
+        filtro_placa = st.text_input(
+            "🚛 PLACA", placeholder="Ej: ABC123",
+            key="hist_placa",
+        ).strip().upper()
     with fr3:
-        filtro_placa = st.selectbox("🚛 PLACA", placas_unicas, key="hist_placa")
+        filtro_codigo = st.text_input(
+            "🔖 CÓDIGO ESTACIÓN", placeholder="Ej: 6008",
+            key="hist_codigo_seg",
+        ).strip().upper()
 
     _fbrow, _ = st.columns([1, 5])
     with _fbrow:
@@ -116,7 +95,13 @@ def render_historial():
         st.info("Selecciona los filtros y presiona **🔍 BUSCAR** para ver el historial.")
         return
 
-    _buscar_por_codigo = filtro_codigo != "TODOS"
+    # ── Carga de datos (solo tras presionar BUSCAR) ───────────────────────────
+    df_hist = load_historial()
+    if df_hist.empty:
+        st.info("No hay rutas guardadas aún. Complete el formulario y presione **GUARDAR RUTA** para registrar datos aquí.")
+        return
+
+    _buscar_por_codigo = bool(filtro_codigo)
 
     if _buscar_por_codigo or filtro_tipo in ("TODOS", "SEGUIMIENTOS"):
         df_filtrado = load_seguimientos()
@@ -132,8 +117,10 @@ def render_historial():
             ]
         if _buscar_por_codigo and "seg_codigo" in df_filtrado.columns:
             df_filtrado = df_filtrado[df_filtrado["seg_codigo"] == filtro_codigo]
-        if filtro_ruta != "TODAS" and "ruta" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["ruta"] == filtro_ruta]
+        if filtro_ruta and "ruta" in df_filtrado.columns:
+            df_filtrado = df_filtrado[
+                df_filtrado["ruta"].str.contains(filtro_ruta, na=False, case=False)
+            ]
     else:
         df_filtrado = df_hist.copy()
         if "_fecha_dt" in df_filtrado.columns:
@@ -143,10 +130,14 @@ def render_historial():
             ]
         if filtro_tipo != "TODOS" and "tipo_seguimiento" in df_filtrado.columns:
             df_filtrado = df_filtrado[df_filtrado["tipo_seguimiento"] == filtro_tipo]
-        if filtro_placa != "TODAS" and "placa" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["placa"] == filtro_placa]
-        if filtro_ruta != "TODAS" and "ruta" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["ruta"] == filtro_ruta]
+        if filtro_placa and "placa" in df_filtrado.columns:
+            df_filtrado = df_filtrado[
+                df_filtrado["placa"].str.contains(filtro_placa, na=False, case=False)
+            ]
+        if filtro_ruta and "ruta" in df_filtrado.columns:
+            df_filtrado = df_filtrado[
+                df_filtrado["ruta"].str.contains(filtro_ruta, na=False, case=False)
+            ]
 
     from utils.quality_utils import calcular_estado_calidad
     df_filtrado = df_filtrado.copy()

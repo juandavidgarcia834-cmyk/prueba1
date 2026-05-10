@@ -11,29 +11,6 @@
   "trans_imagenes_nombres_guardados": [],
   "estaciones_guardadas": [],
   "form_ver": 0,
-  "acomp_muestras": [
-    {
-      "ID": "6020",
-      "VOLUMEN (L)": 100,
-      "GRASA (%)": "3.20",
-      "ST (%)": "13.00",
-      "IC (°C)": "-0.536",
-      "AGUA (%)": "",
-      "ALCOHOL": "N/A",
-      "CLORUROS": "N/A",
-      "NEUTRALIZANTES": "N/A",
-      "OBS": "",
-      "_volumen": 100,
-      "_grasa": 3.2,
-      "_st": 13.0,
-      "_ic": -0.536,
-      "_proteina": 3.2,
-      "_agua": null,
-      "_alcohol": "N/A",
-      "_cloruros": "N/A",
-      "_neutralizantes": "N/A",
-      "_obs": ""
-    }
-  ],
+  "acomp_muestras": [],
   "contra_muestras": []
 }
