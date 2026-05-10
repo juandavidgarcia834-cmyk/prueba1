@@ -89,8 +89,19 @@ def activar_siguiente_con_enter():
 
           /* ── Inputs visibles en la página ────────────────────────── */
           function obtenerInputsVisibles() {
-            return Array.from(document.querySelectorAll('input,textarea')).filter(function(el) {
-              if (!esFormInput(el)) return false;
+            var sels = [
+              '[data-testid="stTextInput"] input',
+              '[data-testid="stTextInputRootElement"] input',
+              '[data-testid="stNumberInput"] input',
+              '[data-testid="stDateInput"] input',
+              '[data-testid="stTimeInput"] input',
+              '[data-testid="stTextArea"] textarea',
+              '[data-testid="stSelectbox"] input'
+            ].join(',');
+            var seen = new Set();
+            return Array.from(document.querySelectorAll(sels)).filter(function(el) {
+              if (seen.has(el)) return false;
+              seen.add(el);
               var t = el.getAttribute('type');
               if (t === 'hidden' || t === 'checkbox' || t === 'radio') return false;
               return esVisible(el);
@@ -206,6 +217,8 @@ def activar_siguiente_con_enter():
 
               if (e.key === 'Enter') {
                 e.preventDefault(); e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                try { console.log('[QL_NAV] Enter: todos.length=', todos.length, 'pos=', pos, 'esUlt=', esUlt, 'activeType=', a.getAttribute('type')); } catch(_) {}
                 if (ph.includes('observaciones') || esUlt) clickBtnGuardar();
                 else moverFoco(a, 1);
               } else if (e.key === 'ArrowRight' && !esSel && (esNum || a.selectionStart >= a.value.length)) {
