@@ -127,6 +127,10 @@ def activar_siguiente_con_enter():
             var tag = a.tagName;
             if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
 
+            // No interceptar campos de contraseña: el formulario nativo
+            // de Streamlit se encarga de enviar en Enter.
+            if ((a.getAttribute('type') || '') === 'password') return;
+
             if (esFormInput(a)) {
               var esSel = esSelectbox(a);
               if (esSel && selectboxAbierto(a)) return;
