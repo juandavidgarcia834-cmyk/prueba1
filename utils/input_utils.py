@@ -30,8 +30,12 @@ def activar_siguiente_con_enter():
         """
         <script>
         (function(){
-          if (window._navInstalled) return;
-          window._navInstalled = true;
+          /* Remover listeners previos (permite actualizar el script
+             sin requerir hard refresh del navegador) */
+          if (window._qlNavKeydown) document.removeEventListener('keydown', window._qlNavKeydown, true);
+          if (window._qlNavFocusin) document.removeEventListener('focusin', window._qlNavFocusin);
+          if (window._qlNavClick)   document.removeEventListener('click',   window._qlNavClick,   true);
+          if (window._qlNavObs && window._qlNavObs.disconnect) window._qlNavObs.disconnect();
 
           /* ── Selectores de widgets Streamlit ─────────────────────── */
           var ST_FORM = [
@@ -63,11 +67,11 @@ def activar_siguiente_con_enter():
 
           /* ── Visibilidad real del elemento ───────────────────────── */
           function esVisible(el) {
-            if (el.offsetParent === null) return false;
+            var r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return false;
             var cs = window.getComputedStyle(el);
             if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-            var r = el.getBoundingClientRect();
-            return r.width > 0 && r.height > 0;
+            return true;
           }
 
           /* ── Botón GUARDAR dentro del panel activo ───────────────── */
@@ -199,11 +203,13 @@ def activar_siguiente_con_enter():
           }
 
           /* Escuchar clics de usuario en los tabs → guardar índice */
-          document.addEventListener('click', function(e) {
+          var _qlClickH = function(e) {
             if (!e.target || !e.target.closest) return;
             var tab = e.target.closest('[data-testid="stTab"]');
-            if (tab) setTimeout(_qlSaveTab, 80);   /* esperar a que React actualice aria-selected */
-          }, true);
+            if (tab) setTimeout(_qlSaveTab, 80);
+          };
+          document.addEventListener('click', _qlClickH, true);
+          window._qlNavClick = _qlClickH;
 
           /* MutationObserver: detectar reruns de Streamlit y restaurar tab */
           var _qlObserver = new MutationObserver(function() {
@@ -211,20 +217,23 @@ def activar_siguiente_con_enter():
             _qlRestTimer = setTimeout(_qlRestoreTab, 200);
           });
           _qlObserver.observe(document.body, { childList: true, subtree: true });
+          window._qlNavObs = _qlObserver;
 
           /* ── Manejo de Data Editor (grilla) ──────────────────────── */
           var _inGrid = false;
 
-          document.addEventListener('focusin', function(e) {
+          var _qlFocusH = function(e) {
             if (!_inGrid) return;
             var t = e.target, tag = t.tagName;
             if ((tag === 'INPUT' || tag === 'TEXTAREA') && !esFormInput(t)) return;
             if (tag === 'CANVAS' && t.closest('[data-testid="stDataEditor"]')) return;
             _inGrid = false; clickBtnGuardar();
-          });
+          };
+          document.addEventListener('focusin', _qlFocusH);
+          window._qlNavFocusin = _qlFocusH;
 
           /* ── Navegación por teclado ───────────────────────────────── */
-          document.addEventListener('keydown', function(e) {
+          var _qlKeyH = function(e) {
             var a = document.activeElement;
             if (!a) return;
             var tag = a.tagName;
@@ -276,7 +285,9 @@ def activar_siguiente_con_enter():
             } else if (e.key === 'ArrowLeft' && (isNum || a.selectionStart <= 0)) {
               e.preventDefault(); e.stopPropagation(); tab(true);
             }
-          }, true);
+          };
+          document.addEventListener('keydown', _qlKeyH, true);
+          window._qlNavKeydown = _qlKeyH;
 
         })();
         </script>
