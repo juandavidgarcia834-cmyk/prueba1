@@ -289,6 +289,63 @@ def activar_siguiente_con_enter():
           document.addEventListener('keydown', _qlKeyH, true);
           window._qlNavKeydown = _qlKeyH;
 
+          /* ══════════════════════════════════════════════════════════
+             HANDLER DIRECTO PARA st.form (LOGIN, ETC.)
+             ──────────────────────────────────────────────────────────
+             Adjunta el listener directamente a cada input dentro de
+             un st.form. Bypasea cualquier interferencia del nivel
+             document. Garantiza que Enter mueva al siguiente input
+             del mismo form, o haga click en el submit si es el último.
+          ══════════════════════════════════════════════════════════ */
+          function _qlSetupForm(form) {
+            var inputs = form.querySelectorAll('input,textarea');
+            var subBtn = form.querySelector('button[type="submit"]')
+                      || form.querySelector('[data-testid="stFormSubmitButton"] button')
+                      || form.querySelector('button');
+            for (var i = 0; i < inputs.length; i++) {
+              var inp = inputs[i];
+              var t = inp.getAttribute('type');
+              if (t === 'hidden' || t === 'checkbox' || t === 'radio' ||
+                  t === 'submit' || t === 'button' || t === 'file') continue;
+              if (inp._qlFormBound) continue;
+              inp._qlFormBound = true;
+              var nextInp = null;
+              for (var j = i + 1; j < inputs.length; j++) {
+                var nt = inputs[j].getAttribute('type');
+                if (nt === 'hidden' || nt === 'checkbox' || nt === 'radio' ||
+                    nt === 'submit' || nt === 'button' || nt === 'file') continue;
+                nextInp = inputs[j];
+                break;
+              }
+              (function(next, btn) {
+                inp.addEventListener('keydown', function(e) {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                  if (next) {
+                    setTimeout(function() {
+                      next.focus();
+                      try { next.select(); } catch(_) {}
+                    }, 30);
+                  } else if (btn) {
+                    setTimeout(function() { btn.click(); }, 30);
+                  }
+                }, true);
+              })(nextInp, subBtn);
+            }
+          }
+
+          function _qlScanForms() {
+            var forms = document.querySelectorAll('[data-testid="stForm"]');
+            for (var i = 0; i < forms.length; i++) _qlSetupForm(forms[i]);
+          }
+          _qlScanForms();
+          var _qlFormObs = new MutationObserver(_qlScanForms);
+          _qlFormObs.observe(document.body, { childList: true, subtree: true });
+          if (window._qlFormObs && window._qlFormObs.disconnect) window._qlFormObs.disconnect();
+          window._qlFormObs = _qlFormObs;
+
         })();
         </script>
         """
