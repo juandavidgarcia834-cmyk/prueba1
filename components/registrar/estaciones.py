@@ -155,6 +155,101 @@ def render_estaciones():
     st.markdown("<hr style='border-color:#E5E7EB;margin:8px 0 14px 0;'>",
                 unsafe_allow_html=True)
 
+    # ── Importación masiva (pegar desde Excel) ───────────────────────────
+    if _is_admin():
+        with st.expander("📋 Pegar / importar desde Excel", expanded=False):
+            st.caption(
+                "Copia las columnas **CÓDIGO · NOMBRE · ASESOR** desde Excel "
+                "(Ctrl+C) y pega (Ctrl+V) directamente sobre la tabla. "
+                "Si el código ya existe se **actualiza**; si es nuevo se **agrega**."
+            )
+            _imp_fg = st.session_state.get("_cat_imp_fg", 0)
+            _empty_imp = pd.DataFrame(
+                [{"CÓDIGO": "", "NOMBRE": "", "ASESOR": ""} for _ in range(8)]
+            )
+            _imp_edit = st.data_editor(
+                _empty_imp,
+                num_rows="dynamic",
+                width="stretch",
+                key=f"cat_imp_editor_{_imp_fg}",
+                column_config={
+                    "CÓDIGO": st.column_config.TextColumn("CÓDIGO", width="small"),
+                    "NOMBRE": st.column_config.TextColumn("NOMBRE", width="large"),
+                    "ASESOR": st.column_config.TextColumn("ASESOR", width="medium"),
+                },
+            )
+
+            # Normaliza y descarta filas vacías
+            _imp_df = _imp_edit.copy()
+            for _c in ("CÓDIGO", "NOMBRE", "ASESOR"):
+                _imp_df[_c] = _imp_df[_c].fillna("").astype(str).str.strip()
+            _imp_df["CÓDIGO"] = _imp_df["CÓDIGO"].str.upper()
+            _imp_df["NOMBRE"] = _imp_df["NOMBRE"].str.upper()
+            _imp_df["ASESOR"] = _imp_df["ASESOR"].str.upper()
+            _imp_df = _imp_df[(_imp_df["CÓDIGO"] != "") & (_imp_df["NOMBRE"] != "")]
+
+            # Detecta duplicados internos (mismo código pegado más de una vez)
+            _dup_cods = _imp_df["CÓDIGO"][_imp_df["CÓDIGO"].duplicated()].unique().tolist()
+
+            _df_actual = load_catalogo()
+            _existentes = set(_df_actual["codigo"].astype(str).str.upper())
+            _n_total = len(_imp_df)
+            _n_nuevos = (~_imp_df["CÓDIGO"].isin(_existentes)).sum() if _n_total else 0
+            _n_actualiza = (_imp_df["CÓDIGO"].isin(_existentes)).sum() if _n_total else 0
+
+            _ck1, _ck2, _ck3 = st.columns(3)
+            with _ck1:
+                st.metric("Filas válidas", _n_total)
+            with _ck2:
+                st.metric("Nuevas", int(_n_nuevos))
+            with _ck3:
+                st.metric("Actualizan existentes", int(_n_actualiza))
+
+            if _dup_cods:
+                st.error(
+                    f"⚠️ Códigos repetidos en lo que pegaste: "
+                    f"{', '.join(_dup_cods[:10])}"
+                    + (" …" if len(_dup_cods) > 10 else "")
+                )
+
+            _ib1, _ib2, _ = st.columns([1.2, 1, 4])
+            with _ib1:
+                _imp_btn = st.button(
+                    "💾 Importar todo",
+                    type="primary",
+                    width="stretch",
+                    key=f"cat_imp_btn_{_imp_fg}",
+                    disabled=(_n_total == 0 or bool(_dup_cods)),
+                )
+            with _ib2:
+                _imp_clr = st.button(
+                    "🧹 Limpiar tabla",
+                    width="stretch",
+                    key=f"cat_imp_clr_{_imp_fg}",
+                )
+
+            if _imp_clr:
+                st.session_state["_cat_imp_fg"] = _imp_fg + 1
+                st.rerun()
+
+            if _imp_btn and _n_total and not _dup_cods:
+                # Combina catálogo actual con lo importado: lo importado pisa.
+                _final = _df_actual.copy()
+                _final["codigo"] = _final["codigo"].astype(str).str.upper()
+                _imp_norm = _imp_df.rename(columns={
+                    "CÓDIGO": "codigo", "NOMBRE": "nombre", "ASESOR": "asesor"
+                })[["codigo", "nombre", "asesor"]]
+                _final = _final[~_final["codigo"].isin(_imp_norm["codigo"])]
+                _final = pd.concat([_final, _imp_norm], ignore_index=True)
+                save_catalogo(_final)
+                load_catalogo.clear()
+                st.session_state["_cat_imp_fg"] = _imp_fg + 1
+                st.success(
+                    f"✅ Importación completa: {_n_nuevos} nuevas · "
+                    f"{_n_actualiza} actualizadas."
+                )
+                st.rerun()
+
     if st.session_state.cat_accion == "nueva":
         st.markdown(
             "<div id='nueva-est-anchor' style='font-size:1rem;font-weight:700;"
