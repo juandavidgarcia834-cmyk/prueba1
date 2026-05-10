@@ -15,6 +15,13 @@
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────────────────
+-- 0) LIMPIEZA de tablas remanentes vacías de intentos anteriores
+--    (NO toca usuarios_app ni ninguna tabla con datos creada por este script)
+-- ────────────────────────────────────────────────────────────────────────────
+DROP TABLE IF EXISTS public.seguimientos_estaciones CASCADE;
+
+
+-- ────────────────────────────────────────────────────────────────────────────
 -- 1) CATÁLOGO DE ESTACIONES (gestionado en Registrar → Estaciones)
 -- ────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.estaciones_catalogo (
