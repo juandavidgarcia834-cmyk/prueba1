@@ -348,5 +348,6 @@ def activar_siguiente_con_enter():
 
         })();
         </script>
-        """
+        """,
+        unsafe_allow_javascript=True,
     )

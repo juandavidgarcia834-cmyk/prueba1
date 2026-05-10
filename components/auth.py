@@ -5,6 +5,7 @@ import streamlit as st
 
 from config.constants import _DATOS_LECHE
 from db.supabase_client import init_connection
+from utils.auth_utils import es_hash_bcrypt, hashear_contrasena, verificar_contrasena
 from utils.input_utils import activar_siguiente_con_enter
 
 
@@ -56,9 +57,24 @@ def render_login(ql_logo_crop_b64: str, nestle_logo_b64: str):
 
         if _li_submitted:
             try:
-                respuesta = supabase.table("usuarios_app").select("*").eq("nombre_usuario", _li_u).eq("contrasena", _li_p).execute()
-                if len(respuesta.data) > 0:
-                    usuario_db = respuesta.data[0]
+                respuesta = supabase.table("usuarios_app").select("*").eq("nombre_usuario", _li_u).execute()
+                usuario_db = respuesta.data[0] if respuesta.data else None
+                pwd_ok = False
+                if usuario_db:
+                    almacenada = usuario_db.get("contrasena", "") or ""
+                    if es_hash_bcrypt(almacenada):
+                        pwd_ok = verificar_contrasena(_li_p, almacenada)
+                    else:
+                        # Compatibilidad: contraseña aún en texto plano → verificar y auto-migrar a hash
+                        if _li_p == almacenada:
+                            pwd_ok = True
+                            try:
+                                supabase.table("usuarios_app").update(
+                                    {"contrasena": hashear_contrasena(_li_p)}
+                                ).eq("id", usuario_db["id"]).execute()
+                            except Exception:
+                                pass
+                if pwd_ok and usuario_db:
                     st.session_state._logged_in      = True
                     st.session_state._rol_usuario    = usuario_db["rol"]
                     st.session_state._nombre_usuario = usuario_db["nombre_usuario"]

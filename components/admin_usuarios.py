@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 
 from db.supabase_client import init_connection
+from utils.auth_utils import hashear_contrasena
 
 
 _ROL_OPTS = ["ADMINISTRADOR", "OPERARIO"]
@@ -74,7 +75,7 @@ def render_admin_usuarios():
                 try:
                     _get_supabase().table("usuarios_app").insert({
                         "nombre_usuario": _nu_usuario,
-                        "contrasena": _nu_contrasena,
+                        "contrasena": hashear_contrasena(_nu_contrasena),
                         "rol": _nu_rol,
                     }).execute()
                     st.success(f"✅ Usuario «{_nu_usuario}» creado con rol **{_nu_rol_label}**.")
