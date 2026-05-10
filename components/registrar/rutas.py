@@ -55,8 +55,7 @@ def render_rutas():
     )
     conductor = r2c2.text_input(
         "👤  CONDUCTOR", placeholder="NOMBRE COMPLETO",
-        key=f"conductor_{_fg}", on_change=convertir_a_mayusculas,
-        args=(f"conductor_{_fg}",),
+        key=f"conductor_{_fg}",
     )
     volumen = r2c3.number_input(
         "📦  VOLUMEN (L)", min_value=0, value=None, step=1,
@@ -420,7 +419,7 @@ def render_rutas():
             "fecha":            fecha_ruta.strftime("%d/%m/%Y") if fecha_ruta else "",
             "ruta":             nombre_ruta or "",
             "placa":            placa or "",
-            "conductor":        conductor or "",
+            "conductor":        (conductor or "").upper(),
             "volumen_declarado": int(volumen) if volumen else "",
             "vol_estaciones":   int(vol_est_total) if vol_est_total else "",
             "diferencia":       int(diferencia) if vol_ruta else "",

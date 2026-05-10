@@ -138,6 +138,11 @@ st.markdown(
         border-radius: 8px !important;
     }
 
+    /* ── Mayúsculas visuales en inputs de texto (sin rerun) ────── */
+    div[data-testid="stTextInput"] input:not([type="password"]) {
+        text-transform: uppercase;
+    }
+
     /* ── Divisores ─────────────────────────────────────────────── */
     hr { border-color: #E5E7EB !important; }
 
@@ -188,8 +193,7 @@ render_sidebar(_ql_logo_b64)
 # ── Sidebar-close JS injection ───────────────────────────────────────────────
 if st.session_state._sidebar_close:
     st.session_state._sidebar_close = False
-    import streamlit.components.v1 as _stc
-    _stc.html(
+    st.html(
         """<script>
         (function(){
             var attempts = 0;
@@ -212,7 +216,7 @@ if st.session_state._sidebar_close:
             setTimeout(tryClose, 80);
         })();
         </script>""",
-        height=1,
+        unsafe_allow_javascript=True,
     )
 
 # ── Page routing ─────────────────────────────────────────────────────────────

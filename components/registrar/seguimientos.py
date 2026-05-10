@@ -89,15 +89,11 @@ def render_seguimientos():
                     seg_ruta_acomp = sa2.text_input(
                         "📍 NOMBRE DE LA RUTA", placeholder="ESCRIBA AQUÍ...",
                         key=f"seg_ruta_acomp_{_ti}_{_fg_seg}",
-                        on_change=convertir_a_mayusculas,
-                        args=(f"seg_ruta_acomp_{_ti}_{_fg_seg}",),
                     )
                     sb1, sb2 = st.columns(2)
                     seg_quien_trajo = sb1.text_input(
                         "👤 ENTREGADO POR", placeholder="NOMBRE COMPLETO",
                         key=f"seg_quien_trajo_{_ti}_{_fg_seg}",
-                        on_change=convertir_a_mayusculas,
-                        args=(f"seg_quien_trajo_{_ti}_{_fg_seg}",),
                     )
                     seg_vol_declarado_id = sb2.number_input(
                         "🪣 VOLUMEN (L)", min_value=0, step=1,
@@ -135,8 +131,6 @@ def render_seguimientos():
                     seg_responsable = sc2.text_input(
                         "👤 ENTREGADO POR", placeholder="NOMBRE...",
                         key=f"seg_responsable_{_ti}_{_fg_seg}",
-                        on_change=convertir_a_mayusculas,
-                        args=(f"seg_responsable_{_ti}_{_fg_seg}",),
                     )
                     st.session_state.setdefault(f"seg_id_muestra_ct_{_ti}_{_fg_seg}", "")
                     seg_id_muestra_ct = sc3.text_input(
@@ -241,8 +235,6 @@ def render_seguimientos():
                     seg_proveedor = st.text_input(
                         "🏭 PROVEEDOR", placeholder="Nombre proveedor...",
                         key=f"seg_proveedor_{_ti}_{_qk}",
-                        on_change=convertir_a_mayusculas,
-                        args=(f"seg_proveedor_{_ti}_{_qk}",),
                     )
                     activar_siguiente_con_enter()
 
@@ -472,7 +464,7 @@ def render_seguimientos():
                              key=f"btn_agregar_contra_{_ti}"):
                     st.session_state[_contra_key].append({
                         "ID":           seg_id_muestra or "",
-                        "PROVEEDOR":    seg_proveedor or "",
+                        "PROVEEDOR":    (seg_proveedor or "").upper(),
                         "GRASA (%)":    f"{seg_grasa:.2f}"    if seg_grasa    is not None else "",
                         "ST (%)":       f"{seg_st:.2f}"       if seg_st       is not None else "",
                         "PROTEÍNA (%)": f"{seg_proteina:.2f}" if seg_proteina is not None else "",
@@ -482,7 +474,7 @@ def render_seguimientos():
                         "CLORUROS":     seg_cloruros,
                         "NEUTRALIZANTES": seg_neutralizantes,
                         "OBS":          seg_observaciones or "",
-                        "_proveedor":   seg_proveedor or "",
+                        "_proveedor":   (seg_proveedor or "").upper(),
                         "_grasa": seg_grasa, "_st": seg_st, "_ic": seg_ic,
                         "_proteina": seg_proteina,
                         "_agua": seg_agua, "_alcohol": seg_alcohol,
@@ -598,9 +590,9 @@ def render_seguimientos():
                     "sub_tipo_seguimiento": _sub,
                     "fecha":                seg_fecha.strftime("%d/%m/%Y") if seg_fecha else "",
                     "seg_codigo":           seg_codigo,
-                    "seg_quien_trajo":      seg_quien_trajo,
-                    "ruta":                 seg_ruta_acomp,
-                    "seg_responsable":      seg_responsable,
+                    "seg_quien_trajo":      (seg_quien_trajo or "").upper(),
+                    "ruta":                 (seg_ruta_acomp or "").upper(),
+                    "seg_responsable":      (seg_responsable or "").upper(),
                     "guardado_en":          ts,
                     "fotos_json":           json.dumps(_s_fotos_paths, ensure_ascii=False),
                 }
