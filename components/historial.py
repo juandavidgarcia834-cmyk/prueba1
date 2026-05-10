@@ -91,7 +91,7 @@ def render_historial():
             st.session_state.hist_buscar_ok = True
             st.rerun()
 
-    if not st.session_state.hist_buscar_ok and not st.session_state.get("admin_accion"):
+    if not st.session_state.hist_buscar_ok:
         st.info("Selecciona los filtros y presiona **🔍 BUSCAR** para ver el historial.")
         return
 
@@ -766,6 +766,25 @@ def render_historial():
                                      + _kpi_card_ac("IC PONDERADO (°C)", _v_ac_icp)
                                      + '</div>')
                             st.markdown(_acr3, unsafe_allow_html=True)
+
+                    _ac_fotos_raw = str(_srow.get("fotos_json", "") or "").strip()
+                    if _ac_fotos_raw and _ac_fotos_raw not in ("[]", ""):
+                        try:
+                            _ac_fotos_list = json.loads(_ac_fotos_raw)
+                        except Exception:
+                            _ac_fotos_list = []
+                        _ac_fotos_exist = [p for p in _ac_fotos_list if os.path.exists(p)]
+                        if _ac_fotos_exist:
+                            st.markdown(
+                                "<div style='font-size:11px;font-weight:700;color:#0056A3;"
+                                "letter-spacing:.05em;margin:12px 0 6px;'>"
+                                "📷 IMÁGENES DE MUESTRAS</div>",
+                                unsafe_allow_html=True,
+                            )
+                            _ac_cols_f = st.columns(min(len(_ac_fotos_exist), 4))
+                            for _afi, _afp in enumerate(_ac_fotos_exist):
+                                with _ac_cols_f[_afi % 4]:
+                                    st.image(_afp, width='stretch')
 
             elif _s_sub == "CONTRAMUESTRAS SOLICITADAS":
                 st.markdown("---")
