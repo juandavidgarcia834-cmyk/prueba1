@@ -96,14 +96,19 @@ def activar_siguiente_con_enter():
               '[data-testid="stDateInput"] input',
               '[data-testid="stTimeInput"] input',
               '[data-testid="stTextArea"] textarea',
-              '[data-testid="stSelectbox"] input'
+              '[data-testid="stSelectbox"] input',
+              'input[type="password"]',
+              'input[type="text"]',
+              'input[type="email"]'
             ].join(',');
             var seen = new Set();
             return Array.from(document.querySelectorAll(sels)).filter(function(el) {
               if (seen.has(el)) return false;
               seen.add(el);
+              if (el.disabled || el.readOnly) return false;
               var t = el.getAttribute('type');
               if (t === 'hidden' || t === 'checkbox' || t === 'radio') return false;
+              if (el.getAttribute('aria-hidden') === 'true') return false;
               return esVisible(el);
             });
           }
