@@ -135,6 +135,20 @@ def render_sidebar(ql_logo_b64: str):
             st.session_state._sidebar_close = True
             st.rerun()
 
+        if st.session_state.get("_rol_usuario") == "ADMINISTRADOR":
+            _adm_active = st.session_state.pagina_activa == "ADMIN_USUARIOS"
+            _adm_lbl = "👥 **Gestión de Usuarios**" if _adm_active else "👥 Gestión de Usuarios"
+            if st.button(
+                _adm_lbl,
+                key="_nav_ADMIN_USUARIOS",
+                width='stretch',
+                type="primary" if _adm_active else "secondary",
+            ):
+                st.session_state.pagina_activa = "ADMIN_USUARIOS"
+                st.session_state.registrar_submenu_open = False
+                st.session_state._sidebar_close = True
+                st.rerun()
+
         st.markdown("<hr style='border-color:#E5E7EB;margin:18px 0;'>", unsafe_allow_html=True)
         st.markdown(
             f"<div style='font-size:0.72rem;color:#9CA3AF;text-align:center;'>"

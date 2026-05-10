@@ -17,6 +17,7 @@ from components.registrar.seguimientos import render_seguimientos
 from components.registrar.estaciones import render_estaciones
 from components.historial import render_historial
 from components.dashboard import render_dashboard
+from components.admin_usuarios import render_admin_usuarios
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="QualiLact", page_icon="🧪", layout="wide")
@@ -234,6 +235,9 @@ elif st.session_state.pagina_activa == "HISTORIAL":
 
 elif st.session_state.pagina_activa == "DASHBOARD":
     render_dashboard()
+
+elif st.session_state.pagina_activa == "ADMIN_USUARIOS":
+    render_admin_usuarios()
 
 # ── Draft autosave ───────────────────────────────────────────────────────────
 save_draft_state()
