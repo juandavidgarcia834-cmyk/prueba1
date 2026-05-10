@@ -1,0 +1,2 @@
+sub_tipo_seguimiento,fecha,seg_codigo,seg_quien_trajo,ruta,seg_responsable,seg_id_muestra,seg_volumen,seg_grasa,seg_st,seg_ic,seg_agua,seg_alcohol,seg_cloruros,seg_neutralizantes,seg_observaciones,seg_vol_declarado,seg_vol_muestras,seg_diferencia_vol,seg_solidos_ruta,seg_crioscopia_ruta,seg_st_pond,seg_ic_pond,muestras_json,guardado_en,fotos_json
+ESTACIONES,09/05/2026,6010,,,,,,3.5,13.5,-0.536,,N/A,N/A,N/A,,,,,,,,,,09/05/2026 23:09,"[""fotos/SEG_EST_6010_20260509_230911_1.jpg""]"

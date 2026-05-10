@@ -220,28 +220,28 @@ def render_rutas():
         if f"nue_crio_{v}" not in st.session_state:
             st.session_state[f"nue_crio_{v}"] = "-0."
 
-        f1, f2, f3, f4, f5, f6 = st.columns([1.5, 1, 1, 1, 1.5, 1])
+        f1, f2, f3, f4, f5, f6 = st.columns([1.5, 1, 1, 1, 1, 1.5])
         form_codigo   = f1.text_input("CÓDIGO", key=f"nue_codigo_{v}",
                                       placeholder="CÓDIGO",
                                       on_change=convertir_a_mayusculas,
                                       args=(f"nue_codigo_{v}",))
-        form_grasa    = f2.number_input("GRASA (%)", key=f"nue_grasa_{v}",
-                                        min_value=0.0, max_value=100.0,
-                                        step=0.01, format="%.2f",
-                                        value=None, placeholder="0.00")
-        form_solidos  = f3.number_input("SÓL. TOT. (%)", key=f"nue_solidos_{v}",
-                                        min_value=0.0, max_value=100.0,
-                                        step=0.01, format="%.2f",
-                                        value=None, placeholder="0.00")
-        form_proteina = f4.number_input("PROTEÍNA (%)", key=f"nue_proteina_{v}",
-                                        min_value=0.0, max_value=100.0,
-                                        step=0.01, format="%.2f",
-                                        value=None, placeholder="0.00")
-        form_crio_raw = f5.text_input("CRIOSCOPIA (°C)", key=f"nue_crio_{v}",
-                                      placeholder="-0.530")
-        form_vol      = f6.number_input("VOLUMEN (L)", key=f"nue_vol_{v}",
+        form_vol      = f2.number_input("VOLUMEN (L)", key=f"nue_vol_{v}",
                                         min_value=0, step=1,
                                         value=None, placeholder="0")
+        form_grasa    = f3.number_input("GRASA (%)", key=f"nue_grasa_{v}",
+                                        min_value=0.0, max_value=100.0,
+                                        step=0.01, format="%.2f",
+                                        value=None, placeholder="0.00")
+        form_solidos  = f4.number_input("SÓL. TOT. (%)", key=f"nue_solidos_{v}",
+                                        min_value=0.0, max_value=100.0,
+                                        step=0.01, format="%.2f",
+                                        value=None, placeholder="0.00")
+        form_proteina = f5.number_input("PROTEÍNA (%)", key=f"nue_proteina_{v}",
+                                        min_value=0.0, max_value=100.0,
+                                        step=0.01, format="%.2f",
+                                        value=None, placeholder="0.00")
+        form_crio_raw = f6.text_input("CRIOSCOPIA (°C)", key=f"nue_crio_{v}",
+                                      placeholder="-0.530")
 
         form_crio_val = (parse_num(form_crio_raw)
                          if form_crio_raw not in ("", "-", "-0", "-0.")

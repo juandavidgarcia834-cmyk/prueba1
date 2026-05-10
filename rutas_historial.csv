@@ -1,0 +1,2 @@
+tipo_seguimiento,fecha,ruta,placa,conductor,volumen_declarado,vol_estaciones,diferencia,solidos_ruta,crioscopia_ruta,st_pond,ic_pond,num_estaciones,guardado_en,st_carrotanque,grasa_muestra,proteina_muestra,diferencia_solidos,estaciones_json,fotos_json
+TRANSUIZA,09/05/2026,ENTRERIOS,ZZZZZ,,,,,13.2,,,,,09/05/2026 23:04,13.0,3.2,3.1,-0.2,,"[""fotos/TRANS_ZZZZZ_20260509_230427_1.png"", ""fotos/TRANS_ZZZZZ_20260509_230427_2.jpg"", ""fotos/TRANS_ZZZZZ_20260509_230427_3.jpg""]"
