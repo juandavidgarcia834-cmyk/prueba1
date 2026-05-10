@@ -15,10 +15,23 @@
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 0) LIMPIEZA de tablas remanentes vacías de intentos anteriores
---    (NO toca usuarios_app ni ninguna tabla con datos creada por este script)
+-- 0) LIMPIEZA — recrea limpio el esquema de QualiLact
+--    NO toca public.usuarios_app (ahí están los usuarios reales).
+--    Todas las demás tablas listadas aquí son nuevas / aún sin datos en uso.
 -- ────────────────────────────────────────────────────────────────────────────
-DROP TABLE IF EXISTS public.seguimientos_estaciones CASCADE;
+DROP VIEW  IF EXISTS public.v_rutas                       CASCADE;
+DROP VIEW  IF EXISTS public.v_acompanamientos             CASCADE;
+DROP VIEW  IF EXISTS public.v_contramuestras              CASCADE;
+
+DROP TABLE IF EXISTS public.rutas_estaciones              CASCADE;
+DROP TABLE IF EXISTS public.rutas                         CASCADE;
+DROP TABLE IF EXISTS public.transuiza                     CASCADE;
+DROP TABLE IF EXISTS public.seguimientos_estaciones       CASCADE;
+DROP TABLE IF EXISTS public.acompanamientos_muestras      CASCADE;
+DROP TABLE IF EXISTS public.acompanamientos               CASCADE;
+DROP TABLE IF EXISTS public.contramuestras_muestras       CASCADE;
+DROP TABLE IF EXISTS public.contramuestras                CASCADE;
+DROP TABLE IF EXISTS public.estaciones_catalogo           CASCADE;
 
 
 -- ────────────────────────────────────────────────────────────────────────────
