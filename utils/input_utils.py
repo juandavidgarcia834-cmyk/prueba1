@@ -82,7 +82,8 @@ def activar_siguiente_con_enter():
             };
             var btns = Array.from(document.querySelectorAll('button'));
             var btn = btns.find(function(b) { return vis(b) && b.innerText.includes('AGREGAR MUESTRA'); })
-                  || btns.find(function(b) { return vis(b) && b.innerText.includes('GUARDAR'); });
+                  || btns.find(function(b) { return vis(b) && b.innerText.includes('GUARDAR'); })
+                  || btns.find(function(b) { return vis(b) && b.innerText.toUpperCase().includes('INICIAR SESI'); });
             if (btn) setTimeout(function() { btn.click(); }, 120);
           }
 
@@ -192,9 +193,6 @@ def activar_siguiente_con_enter():
             if (!a) return;
             var tag = a.tagName;
             if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
-
-            /* No interceptar contraseñas: el form nativo de Streamlit maneja Enter */
-            if ((a.getAttribute('type') || '') === 'password') return;
 
             if (esFormInput(a)) {
               var esSel = esSelectbox(a);
