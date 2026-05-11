@@ -294,7 +294,12 @@ def _df_seg_estaciones(df_seg: pd.DataFrame) -> pd.DataFrame:
 
 
 def _df_acomp_general(df_acomp: pd.DataFrame) -> pd.DataFrame:
-    """Hoja Acomp_General — mismas columnas que General_Rutas usando datos del acompañamiento."""
+    """Hoja Acomp_General — datos cabecera del acompañamiento.
+
+    Acompañamientos NO tienen Conductor (no hay vehículo asociado), pero sí
+    registran 'Entregado por' (quién trajo las muestras al laboratorio) y el
+    'Responsable' del análisis. Se incluyen ambos.
+    """
     rows = []
     for _, r in df_acomp.iterrows():
         st_v = _f(r.get("seg_solidos_ruta"))
@@ -304,8 +309,8 @@ def _df_acomp_general(df_acomp: pd.DataFrame) -> pd.DataFrame:
         rows.append({
             "Fecha":         _s(r.get("fecha")),
             "Ruta":          _s(r.get("ruta")),
-            "Placa":         _s(r.get("placa")),  # acompañamientos no siempre la guardan
-            "Conductor":     _s(r.get("seg_responsable")),
+            "Entregado_Por": _s(r.get("seg_quien_trajo")),
+            "Responsable":   _s(r.get("seg_responsable")),
             "Volumen":       _i(r.get("seg_vol_declarado")),
             "ST":            st_v,
             "ST_Pond":       st_p,
@@ -313,16 +318,22 @@ def _df_acomp_general(df_acomp: pd.DataFrame) -> pd.DataFrame:
             "IC":            ic_v,
             "IC_Pond":       ic_p,
             "Diferencia_IC": (round(ic_v - ic_p, 4) if ic_v is not None and ic_p is not None else None),
+            "Guardado_En":   _s(r.get("guardado_en")),
         })
     return pd.DataFrame(rows, columns=[
-        "Fecha", "Ruta", "Placa", "Conductor", "Volumen",
+        "Fecha", "Ruta", "Entregado_Por", "Responsable", "Volumen",
         "ST", "ST_Pond", "Diferencia_ST",
         "IC", "IC_Pond", "Diferencia_IC",
+        "Guardado_En",
     ])
 
 
 def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataFrame:
-    """Hoja Acomp_Detalles — aplana muestras_json con misma estructura que Detalle_Estaciones."""
+    """Hoja Acomp_Detalles — aplana muestras_json.
+
+    Sin columna Conductor: en acompañamientos quien trae las muestras es
+    'Entregado_Por' (seg_quien_trajo). Se repiten cabecera por cada muestra.
+    """
     rows = []
     for _, r in df_acomp.iterrows():
         muestras = _parse_json_list(r.get("muestras_json"))
@@ -330,7 +341,7 @@ def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.Da
             continue
         fecha   = _s(r.get("fecha"))
         ruta    = _s(r.get("ruta"))
-        placa   = _s(r.get("placa"))
+        quien   = _s(r.get("seg_quien_trajo"))
         respo   = _s(r.get("seg_responsable"))
         vol_dec = _i(r.get("seg_vol_declarado"))
         for m in muestras:
@@ -338,8 +349,8 @@ def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.Da
             rows.append({
                 "Fecha":             fecha,
                 "Ruta":              ruta,
-                "Placa":             placa,
-                "Conductor":         respo,
+                "Entregado_Por":     quien,
+                "Responsable":       respo,
                 "Volumen_Declarado": vol_dec,
                 "Codigo_Estacion":   cod,
                 "Nombre_Estacion":   cat_map.get(cod, ""),
@@ -355,7 +366,7 @@ def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.Da
                 "Observaciones":     _s(m.get("_obs")),
             })
     return pd.DataFrame(rows, columns=[
-        "Fecha", "Ruta", "Placa", "Conductor", "Volumen_Declarado",
+        "Fecha", "Ruta", "Entregado_Por", "Responsable", "Volumen_Declarado",
         "Codigo_Estacion", "Nombre_Estacion",
         "Grasa", "Solidos_Totales", "Proteina", "Crioscopia", "%Agua",
         "Volumen_Estacion", "Alcohol", "Cloruros", "Neutralizantes", "Observaciones",
@@ -363,26 +374,29 @@ def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.Da
 
 
 def _df_contramuestras(df_cm: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataFrame:
-    """Hoja Contramuestras — aplana cada muestra de cada contramuestra."""
+    """Hoja Contramuestras — una fila por muestra con datos guardados.
+
+    Estructura solicitada: Código de muestra · Nombre estación · Proveedor
+    (quien entregó) · parámetros de calidad (Grasa, ST, Proteína, IC, %Agua,
+    Alcohol, Cloruros, Neutralizantes) · Observaciones.
+    Se conserva además Fecha, Ruta y Guardado_En para trazabilidad.
+    """
     rows = []
     for _, r in df_cm.iterrows():
         muestras = _parse_json_list(r.get("muestras_json"))
         fecha     = _s(r.get("fecha"))
         ruta      = _s(r.get("ruta"))
-        seg_cod   = _s(r.get("seg_codigo"))
-        quien     = _s(r.get("seg_quien_trajo"))
+        proveedor = _s(r.get("seg_quien_trajo"))   # quién entregó las muestras
         respo     = _s(r.get("seg_responsable"))
         guardado  = _s(r.get("guardado_en"))
         if not muestras:
-            # Mantener registro aunque no tenga muestras detalle
             rows.append({
                 "Fecha":           fecha,
-                "Codigo_Registro": seg_cod,
-                "Ruta":            ruta,
-                "Entregado_Por":   quien,
-                "Responsable":     respo,
-                "Codigo_Muestra":  "",
+                "Codigo":          "",
                 "Nombre_Estacion": "",
+                "Proveedor":       proveedor,
+                "Ruta":            ruta,
+                "Responsable":     respo,
                 "Grasa":           None,
                 "ST":              None,
                 "Proteina":        None,
@@ -399,12 +413,11 @@ def _df_contramuestras(df_cm: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataF
             cod = _s(m.get("ID") or m.get("_id_muestra"))
             rows.append({
                 "Fecha":           fecha,
-                "Codigo_Registro": seg_cod,
-                "Ruta":            ruta,
-                "Entregado_Por":   quien,
-                "Responsable":     respo,
-                "Codigo_Muestra":  cod,
+                "Codigo":          cod,
                 "Nombre_Estacion": cat_map.get(cod, ""),
+                "Proveedor":       proveedor,
+                "Ruta":            ruta,
+                "Responsable":     respo,
                 "Grasa":           _f(m.get("_grasa")),
                 "ST":              _f(m.get("_st")),
                 "Proteina":        _f(m.get("_proteina")),
@@ -417,8 +430,7 @@ def _df_contramuestras(df_cm: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataF
                 "Guardado_En":     guardado,
             })
     return pd.DataFrame(rows, columns=[
-        "Fecha", "Codigo_Registro", "Ruta", "Entregado_Por", "Responsable",
-        "Codigo_Muestra", "Nombre_Estacion",
+        "Fecha", "Codigo", "Nombre_Estacion", "Proveedor", "Ruta", "Responsable",
         "Grasa", "ST", "Proteina", "IC", "%Agua",
         "Alcohol", "Cloruros", "Neutralizantes", "Observaciones", "Guardado_En",
     ])
