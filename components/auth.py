@@ -48,11 +48,12 @@ def render_login(ql_logo_crop_b64: str, nestle_logo_b64: str):
             'Control de Calidad Láctea &nbsp;·&nbsp; TROMS - Milksourcing</p></div>',
             unsafe_allow_html=True,
         )
-        _li_u = st.text_input("👤 Usuario", placeholder="Ingrese su usuario", key="_li_user")
-        _li_p = st.text_input("🔒 Contraseña", type="password", placeholder="Ingrese su contraseña", key="_li_pass")
-        _li_submitted = st.button(
-            "Iniciar Sesión", type="primary", use_container_width=True, key="_li_submit"
-        )
+        with st.form("_login_form", clear_on_submit=False, border=False):
+            _li_u = st.text_input("👤 Usuario", placeholder="Ingrese su usuario", key="_li_user")
+            _li_p = st.text_input("🔒 Contraseña", type="password", placeholder="Ingrese su contraseña", key="_li_pass")
+            _li_submitted = st.form_submit_button(
+                "Iniciar Sesión", type="primary", use_container_width=True
+            )
         activar_siguiente_con_enter()
 
         if _li_submitted:
