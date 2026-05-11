@@ -102,10 +102,10 @@ def restore_or_sync_session():
     # ── 1. Logout pendiente ───────────────────────────────────────────────
     if st.session_state.pop("_pending_logout", False):
         _inject_js(
-            f'var u=new URL(window.parent.location.href);'
-            f'window.parent.sessionStorage.removeItem("{_TOKEN_KEY}");'
+            f'var u=new URL(window.location.href);'
+            f'window.sessionStorage.removeItem("{_TOKEN_KEY}");'
             f'u.searchParams.delete("{_QPARAM}");'
-            f'window.parent.history.replaceState({{}},"",u.toString());'
+            f'window.history.replaceState({{}},"",u.toString());'
         )
         return
 
@@ -113,7 +113,7 @@ def restore_or_sync_session():
     pending_tok = st.session_state.pop("_pending_token", None)
     if pending_tok:
         _inject_js(
-            f'window.parent.sessionStorage.setItem("{_TOKEN_KEY}",{json.dumps(pending_tok)});'
+            f'window.sessionStorage.setItem("{_TOKEN_KEY}",{json.dumps(pending_tok)});'
         )
 
     # ── 3. Restaurar desde query param si la URL trae token ───────────────
@@ -132,7 +132,7 @@ def restore_or_sync_session():
         else:
             # token inválido/expirado: borra también sessionStorage
             _inject_js(
-                f'window.parent.sessionStorage.removeItem("{_TOKEN_KEY}");'
+                f'window.sessionStorage.removeItem("{_TOKEN_KEY}");'
             )
         # Limpia el query param de la URL (visual + evita re-trigger)
         try:
@@ -141,18 +141,18 @@ def restore_or_sync_session():
             pass
         # También limpiamos la URL del navegador por si Streamlit no lo hizo
         _inject_js(
-            f'var u=new URL(window.parent.location.href);'
+            f'var u=new URL(window.location.href);'
             f'u.searchParams.delete("{_QPARAM}");'
-            f'window.parent.history.replaceState({{}},"",u.toString());'
+            f'window.history.replaceState({{}},"",u.toString());'
         )
 
     # ── 4. Bridge: rehidratar desde sessionStorage si hay token guardado ──
     if not st.session_state.get("_logged_in"):
         _inject_js(
-            f'var u=new URL(window.parent.location.href);'
+            f'var u=new URL(window.location.href);'
             f'if (u.searchParams.get("{_QPARAM}")) return;'
-            f'var t=window.parent.sessionStorage.getItem("{_TOKEN_KEY}");'
+            f'var t=window.sessionStorage.getItem("{_TOKEN_KEY}");'
             f'if (!t) return;'
             f'u.searchParams.set("{_QPARAM}", t);'
-            f'window.parent.location.replace(u.toString());'
+            f'window.location.replace(u.toString());'
         )
