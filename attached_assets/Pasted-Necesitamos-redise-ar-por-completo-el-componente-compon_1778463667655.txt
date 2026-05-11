@@ -1,0 +1,40 @@
+Necesitamos rediseñar por completo el componente components/admin_usuarios.py de la aplicación QualiLact. Esta sección es el centro de control de acceso y debe ser extremadamente intuitiva, limpia y deducible para el Administrador.
+
+⚠️ REGLAS DE DISEÑO (ESTRICTO):
+
+Simplicidad Industrial: Mantén el "Light Mode" (Modo Claro). Usa espacios en blanco para evitar la saturación visual.
+
+Jerarquía: La información más importante debe resaltar.
+
+Consistencia: No cambies los colores institucionales ni la tipografía actual.
+
+Objetivo del Rediseño:
+
+1. Indicador de Usuario Activo:
+
+En la parte superior de la página, añade un banner o una pequeña tarjeta informativa que diga claramente: "Sesión Administrativa Activa: [Nombre del Usuario]". Utiliza st.info o un contenedor con estilo para que sea lo primero que se vea.
+
+2. Organización de la Interfaz (Estructura de Pestañas):
+Implementa st.tabs para dividir la gestión en tres áreas claras:
+
+TAB 1: 📋 Listado y Control: Muestra una tabla elegante con todos los usuarios actuales (Usuario y Rol). Al lado de cada usuario (o debajo de la tabla), añade opciones para seleccionar un usuario y realizar acciones.
+
+TAB 2: ➕ Crear Usuario: Un formulario limpio con campos para: Nombre de Usuario, Contraseña (con opción de ver/ocultar) y un Selectbox para el Rol (Administrador / Operario).
+
+TAB 3: ✏️ Modificar / Eliminar: Un panel donde, al seleccionar un usuario existente, se carguen automáticamente sus datos en campos editables. Debe permitir cambiar el nombre, la contraseña y el rol. Añade un botón de "Actualizar Datos" y un botón de "Eliminar Usuario" (este último con un color de alerta rojo).
+
+3. Lógica de Funcionamiento:
+
+Utiliza la conexión de db/supabase_client.py para que todos los cambios se sincronicen en tiempo real con la base de datos.
+
+Asegúrate de que, tras crear, modificar o eliminar un usuario, la aplicación muestre un mensaje de éxito (st.success) y refresque la lista automáticamente.
+
+Seguridad: Mantén la validación de que esta página SOLO es accesible si st.session_state._rol_usuario == 'Administrador'.
+
+4. Auditoría de Campos:
+
+Verifica que las contraseñas se almacenen correctamente y que el campo de texto sea de tipo password.
+
+Asegúrate de que no se puedan crear usuarios con nombres duplicados.
+
+Realiza una inspección del archivo actual y aplica estas mejoras visuales y funcionales para que la gestión sea lo más sencilla posible.
