@@ -14,7 +14,7 @@ from utils.data_utils import (
     delete_seg_rows, update_seg_row_in_csv,
 )
 from utils.excel_utils import historial_to_excel_filtrado
-from utils.file_utils import get_image_url
+from utils.file_utils import get_image_url, generar_zip_imagenes
 from config.constants import CSV_COLS
 
 
@@ -277,7 +277,7 @@ def render_historial():
 
         if _total_cod > 0:
             _ts = now_col().strftime('%Y%m%d_%H%M')
-            _cx, _ = st.columns([1, 3])
+            _cx, _czip, _ = st.columns([1, 1, 2])
             with _cx:
                 st.download_button(
                     label="⬇️ DESCARGAR REPORTE EXCEL",
@@ -289,6 +289,18 @@ def render_historial():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary", width='stretch',
                 )
+            with _czip:
+                _zip_bytes_cod, _zip_n_cod = generar_zip_imagenes(df_filtrado)
+                if _zip_n_cod > 0:
+                    st.download_button(
+                        label=f"📸 Descargar Evidencias ({_zip_n_cod})",
+                        data=_zip_bytes_cod,
+                        file_name=f"Evidencias_QualiLact_{_ts}.zip",
+                        mime="application/zip",
+                        width='stretch',
+                    )
+                else:
+                    st.info("Sin imágenes adjuntas en estos registros.")
 
         sel = None
         sel_orig_idxs = []
@@ -453,10 +465,10 @@ def render_historial():
             _msg = (f"📋 {_n} fila(s) seleccionada(s)"
                     if sel_orig_idxs
                     else f"📋 {_n} registro(s) filtrados")
-            _cx, _mx, _ = st.columns([1, 2, 3])
+            _cx, _czip, _mx = st.columns([1, 1, 3])
             with _cx:
                 st.download_button(
-                    label="⬇️ DESCARGAR",
+                    label="⬇️ DESCARGAR EXCEL",
                     data=historial_to_excel_filtrado(
                         df_para_excel, fecha_desde, fecha_hasta,
                         filtro_tipo, filtro_subtipo
@@ -466,6 +478,22 @@ def render_historial():
                     type="primary",
                     width='stretch',
                 )
+            with _czip:
+                _zip_bytes, _zip_n = generar_zip_imagenes(df_para_excel)
+                if _zip_n > 0:
+                    st.download_button(
+                        label=f"📸 EVIDENCIAS ({_zip_n})",
+                        data=_zip_bytes,
+                        file_name=f"Evidencias_QualiLact_{_ts}.zip",
+                        mime="application/zip",
+                        width='stretch',
+                    )
+                else:
+                    st.markdown(
+                        "<div style='padding:8px 0 0 4px;font-size:12px;"
+                        "color:#6B7280;'>📷 Sin imágenes adjuntas</div>",
+                        unsafe_allow_html=True,
+                    )
             with _mx:
                 st.markdown(
                     f"<div style='padding:8px 0 0 4px;font-size:13px;"
