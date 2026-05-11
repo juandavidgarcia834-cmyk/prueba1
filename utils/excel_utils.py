@@ -517,20 +517,25 @@ def historial_to_excel_filtrado(
 
     if filtro_tipo in ("SEGUIMIENTOS", "TODOS") and not df_seg_in.empty:
         sub = "sub_tipo_seguimiento"
+        # Normaliza valores reales del schema:
+        #   ESTACIONES · ACOMPAÑAMIENTOS · CONTRAMUESTRAS SOLICITADAS
+        _CM_VAL = "CONTRAMUESTRAS SOLICITADAS"
         if sub in df_seg_in.columns:
-            df_est   = df_seg_in[df_seg_in[sub] == "ESTACIONES"].copy()
-            df_acomp = df_seg_in[df_seg_in[sub] == "ACOMPAÑAMIENTOS"].copy()
-            df_cm    = df_seg_in[df_seg_in[sub] == "CONTRAMUESTRAS"].copy()
+            _vals = df_seg_in[sub].astype(str).str.strip().str.upper()
+            df_est   = df_seg_in[_vals == "ESTACIONES"].copy()
+            df_acomp = df_seg_in[_vals == "ACOMPAÑAMIENTOS"].copy()
+            df_cm    = df_seg_in[_vals.str.startswith("CONTRAMUESTRAS")].copy()
         else:
             df_est = df_acomp = df_cm = df_seg_in.copy()
 
         # Filtro_subtipo restringe SOLO si filtro_tipo=SEGUIMIENTOS
         if filtro_tipo == "SEGUIMIENTOS" and filtro_subtipo != "TODOS":
-            if filtro_subtipo == "ESTACIONES":
+            _fsub = filtro_subtipo.strip().upper()
+            if _fsub == "ESTACIONES":
                 df_acomp = df_acomp.iloc[0:0]; df_cm = df_cm.iloc[0:0]
-            elif filtro_subtipo == "ACOMPAÑAMIENTOS":
+            elif _fsub == "ACOMPAÑAMIENTOS":
                 df_est = df_est.iloc[0:0]; df_cm = df_cm.iloc[0:0]
-            elif filtro_subtipo == "CONTRAMUESTRAS":
+            elif _fsub.startswith("CONTRAMUESTRAS"):
                 df_est = df_est.iloc[0:0]; df_acomp = df_acomp.iloc[0:0]
 
         if not df_est.empty:
