@@ -1,14 +1,432 @@
+"""Exportación contextual a Excel del módulo Historial.
+
+Diseño:
+  • Estructura estrictamente tabular (una columna por dato, sin celdas combinadas).
+  • Parámetros numéricos exportados como float real (no texto).
+  • Crioscopía con formato 0.000 manteniendo signo negativo, reconocible numéricamente.
+  • Freeze panes en fila 1 de todas las hojas.
+  • Solo se exportan los datos filtrados que llegan en df_filtrado.
+
+Hojas generadas (contextuales):
+  filtro_tipo == "RUTAS"        → General_Rutas + Detalle_Estaciones
+  filtro_tipo == "TRANSUIZA"    → Transuiza
+  filtro_tipo == "SEGUIMIENTOS" según filtro_subtipo:
+        ESTACIONES              → Seg_Estaciones
+        ACOMPAÑAMIENTOS         → Acomp_General + Acomp_Detalles
+        CONTRAMUESTRAS          → Contramuestras
+        TODOS                   → todas las hojas anteriores que apliquen
+  filtro_tipo == "TODOS"        → todas las hojas que correspondan a la data
+"""
+from __future__ import annotations
+
 import io
 import json
-from datetime import date
+from typing import Any
 
-import openpyxl
 import pandas as pd
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
-from utils.data_utils import load_seguimientos, load_catalogo
+from utils.data_utils import load_catalogo, load_seguimientos
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Helpers numéricos (devuelven float/int reales, no texto)
+# ─────────────────────────────────────────────────────────────────────
+def _f(v: Any) -> float | None:
+    if v is None or v == "":
+        return None
+    try:
+        if isinstance(v, float) and pd.isna(v):
+            return None
+        return float(str(v).replace(",", "."))
+    except (ValueError, TypeError):
+        return None
+
+
+def _i(v: Any) -> int | None:
+    f = _f(v)
+    return int(f) if f is not None else None
+
+
+def _s(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and pd.isna(v):
+        return ""
+    return str(v).strip()
+
+
+def _parse_json_list(raw: Any) -> list[dict]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return raw
+    try:
+        data = json.loads(str(raw))
+        return data if isinstance(data, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Estilos
+# ─────────────────────────────────────────────────────────────────────
+_HDR_FILL = PatternFill("solid", fgColor="1F4E79")
+_HDR_FONT = Font(bold=True, color="FFFFFF", size=10)
+_HDR_ALIGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_BORDER = Border(
+    left=Side(style="thin", color="D0D7DE"),
+    right=Side(style="thin", color="D0D7DE"),
+    top=Side(style="thin", color="D0D7DE"),
+    bottom=Side(style="thin", color="D0D7DE"),
+)
+
+# Formatos numéricos por nombre de columna (sufijo permite distinguir crioscopía)
+_FMT_INT = "#,##0"
+_FMT_2 = "0.00"
+_FMT_3 = "0.000"
+
+_NUM_FORMATS: dict[str, str] = {
+    # ── Volumen e intero ────────────────────────
+    "Volumen": _FMT_INT,
+    "Volumen_Declarado": _FMT_INT,
+    "Volumen_Estacion": _FMT_INT,
+    "Volumen_Suma_Muestras": _FMT_INT,
+    "Diferencia_Volumen": _FMT_INT,
+    # ── Porcentajes 2 decimales ─────────────────
+    "ST": _FMT_2,
+    "ST_Pond": _FMT_2,
+    "Diferencia_ST": _FMT_2,
+    "Solidos_Totales": _FMT_2,
+    "Grasa": _FMT_2,
+    "Proteina": _FMT_2,
+    "%Agua": _FMT_2,
+    "ST_Carrotanque": _FMT_2,
+    "ST_Contramuestra": _FMT_2,
+    "Diferencia_ST_Carr_Contra": _FMT_2,
+    # ── Crioscopía 3 decimales (negativos válidos) ──
+    "IC": _FMT_3,
+    "IC_Pond": _FMT_3,
+    "Diferencia_IC": _FMT_3,
+    "Crioscopia": _FMT_3,
+}
+
+
+def _apply_sheet_styling(ws, df: pd.DataFrame) -> None:
+    """Estiliza encabezado, freeze panes, formatos numéricos y anchos."""
+    if df.empty:
+        # Mantener encabezados aún sin datos
+        for col_idx, col_name in enumerate(df.columns, start=1):
+            c = ws.cell(row=1, column=col_idx, value=str(col_name))
+            c.fill = _HDR_FILL
+            c.font = _HDR_FONT
+            c.alignment = _HDR_ALIGN
+            c.border = _BORDER
+        ws.freeze_panes = "A2"
+        return
+
+    n_rows = len(df) + 1  # +1 por encabezado
+    n_cols = len(df.columns)
+
+    # Encabezado
+    for col_idx, col_name in enumerate(df.columns, start=1):
+        c = ws.cell(row=1, column=col_idx)
+        c.fill = _HDR_FILL
+        c.font = _HDR_FONT
+        c.alignment = _HDR_ALIGN
+        c.border = _BORDER
+
+    ws.row_dimensions[1].height = 26
+    ws.freeze_panes = "A2"
+
+    # Formato numérico por columna + bordes ligeros
+    for col_idx, col_name in enumerate(df.columns, start=1):
+        fmt = _NUM_FORMATS.get(str(col_name))
+        col_letter = get_column_letter(col_idx)
+
+        # Auto ancho en función del header y de muestras de datos
+        try:
+            sample_max = df[col_name].astype(str).head(50).map(len).max()
+        except Exception:
+            sample_max = 0
+        width = max(12, min(38, max(len(str(col_name)) + 2, int(sample_max) + 2)))
+        ws.column_dimensions[col_letter].width = width
+
+        if fmt:
+            for r in range(2, n_rows + 1):
+                ws.cell(row=r, column=col_idx).number_format = fmt
+
+    # Bordes y alineación generales (no tocan tipo de dato)
+    align_center = Alignment(horizontal="center", vertical="center")
+    for r in range(2, n_rows + 1):
+        for c_idx in range(1, n_cols + 1):
+            cell = ws.cell(row=r, column=c_idx)
+            cell.border = _BORDER
+            cell.alignment = align_center
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Constructores de DataFrames por tipo
+# ─────────────────────────────────────────────────────────────────────
+def _df_general_rutas(df_rutas: pd.DataFrame) -> pd.DataFrame:
+    """Hoja General_Rutas — una fila por ruta."""
+    rows = []
+    for _, r in df_rutas.iterrows():
+        st_v = _f(r.get("solidos_ruta"))
+        st_p = _f(r.get("st_pond"))
+        ic_v = _f(r.get("crioscopia_ruta"))
+        ic_p = _f(r.get("ic_pond"))
+        rows.append(
+            {
+                "Fecha":         _s(r.get("fecha")),
+                "Ruta":          _s(r.get("ruta")),
+                "Placa":         _s(r.get("placa")),
+                "Conductor":     _s(r.get("conductor")),
+                "Volumen":       _i(r.get("volumen_declarado")),
+                "ST":            st_v,
+                "ST_Pond":       st_p,
+                "Diferencia_ST": (round(st_v - st_p, 3) if st_v is not None and st_p is not None else None),
+                "IC":            ic_v,
+                "IC_Pond":       ic_p,
+                "Diferencia_IC": (round(ic_v - ic_p, 4) if ic_v is not None and ic_p is not None else None),
+            }
+        )
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Ruta", "Placa", "Conductor", "Volumen",
+        "ST", "ST_Pond", "Diferencia_ST",
+        "IC", "IC_Pond", "Diferencia_IC",
+    ])
+
+
+def _df_detalle_estaciones(df_rutas: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataFrame:
+    """Hoja Detalle_Estaciones — aplana cada estación repitiendo cabecera."""
+    rows = []
+    for _, r in df_rutas.iterrows():
+        ests = _parse_json_list(r.get("estaciones_json"))
+        if not ests:
+            continue
+        fecha   = _s(r.get("fecha"))
+        ruta    = _s(r.get("ruta"))
+        placa   = _s(r.get("placa"))
+        conduct = _s(r.get("conductor"))
+        vol_dec = _i(r.get("volumen_declarado"))
+        for e in ests:
+            cod = _s(e.get("codigo"))
+            rows.append({
+                "Fecha":             fecha,
+                "Ruta":              ruta,
+                "Placa":             placa,
+                "Conductor":         conduct,
+                "Volumen_Declarado": vol_dec,
+                "Codigo_Estacion":   cod,
+                "Nombre_Estacion":   cat_map.get(cod, ""),
+                "Grasa":             _f(e.get("grasa")),
+                "Solidos_Totales":   _f(e.get("solidos")),
+                "Proteina":          _f(e.get("proteina")),
+                "Crioscopia":        _f(e.get("crioscopia")),
+                "%Agua":             _f(e.get("agua_pct")),
+                "Volumen_Estacion":  _i(e.get("volumen")),
+                "Alcohol":           _s(e.get("alcohol")),
+                "Cloruros":          _s(e.get("cloruros")),
+                "Neutralizantes":    _s(e.get("neutralizantes")),
+                "Observaciones":     _s(e.get("obs")),
+            })
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Ruta", "Placa", "Conductor", "Volumen_Declarado",
+        "Codigo_Estacion", "Nombre_Estacion",
+        "Grasa", "Solidos_Totales", "Proteina", "Crioscopia", "%Agua",
+        "Volumen_Estacion", "Alcohol", "Cloruros", "Neutralizantes", "Observaciones",
+    ])
+
+
+def _df_transuiza(df_t: pd.DataFrame) -> pd.DataFrame:
+    """Hoja Transuiza."""
+    rows = []
+    for _, r in df_t.iterrows():
+        st_carr = _f(r.get("st_carrotanque"))
+        st_cm   = _f(r.get("solidos_ruta"))  # ST de la contramuestra/muestra
+        diff    = _f(r.get("diferencia_solidos"))
+        if diff is None and st_carr is not None and st_cm is not None:
+            diff = round(st_carr - st_cm, 3)
+        rows.append({
+            "Fecha":                     _s(r.get("fecha")),
+            "Placa":                     _s(r.get("placa")),
+            "ST_Carrotanque":            st_carr,
+            "Grasa":                     _f(r.get("grasa_muestra")),
+            "ST_Contramuestra":          st_cm,
+            "Proteina":                  _f(r.get("proteina_muestra")),
+            "Diferencia_ST_Carr_Contra": diff,
+        })
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Placa", "ST_Carrotanque", "Grasa",
+        "ST_Contramuestra", "Proteina", "Diferencia_ST_Carr_Contra",
+    ])
+
+
+def _df_seg_estaciones(df_seg: pd.DataFrame) -> pd.DataFrame:
+    """Hoja Seg_Estaciones — datos planos del subtipo ESTACIONES."""
+    rows = []
+    for _, r in df_seg.iterrows():
+        rows.append({
+            "Codigo_Estacion": _s(r.get("seg_codigo")),
+            "Fecha":           _s(r.get("fecha")),
+            "Ruta":            _s(r.get("ruta")),
+            "Entregado_Por":   _s(r.get("seg_quien_trajo")),
+            "Responsable":     _s(r.get("seg_responsable")),
+            "ID_Muestra":      _s(r.get("seg_id_muestra")),
+            "Grasa":           _f(r.get("seg_grasa")),
+            "ST":              _f(r.get("seg_st")),
+            "Proteina":        _f(r.get("seg_proteina")),
+            "IC":              _f(r.get("seg_ic")),
+            "%Agua":           _f(r.get("seg_agua")),
+            "Alcohol":         _s(r.get("seg_alcohol")),
+            "Cloruros":        _s(r.get("seg_cloruros")),
+            "Neutralizantes":  _s(r.get("seg_neutralizantes")),
+            "Observaciones":   _s(r.get("seg_observaciones")),
+            "Guardado_En":     _s(r.get("guardado_en")),
+        })
+    return pd.DataFrame(rows, columns=[
+        "Codigo_Estacion", "Fecha", "Ruta", "Entregado_Por", "Responsable",
+        "ID_Muestra", "Grasa", "ST", "Proteina", "IC", "%Agua",
+        "Alcohol", "Cloruros", "Neutralizantes", "Observaciones", "Guardado_En",
+    ])
+
+
+def _df_acomp_general(df_acomp: pd.DataFrame) -> pd.DataFrame:
+    """Hoja Acomp_General — mismas columnas que General_Rutas usando datos del acompañamiento."""
+    rows = []
+    for _, r in df_acomp.iterrows():
+        st_v = _f(r.get("seg_solidos_ruta"))
+        st_p = _f(r.get("seg_st_pond"))
+        ic_v = _f(r.get("seg_crioscopia_ruta"))
+        ic_p = _f(r.get("seg_ic_pond"))
+        rows.append({
+            "Fecha":         _s(r.get("fecha")),
+            "Ruta":          _s(r.get("ruta")),
+            "Placa":         _s(r.get("placa")),  # acompañamientos no siempre la guardan
+            "Conductor":     _s(r.get("seg_responsable")),
+            "Volumen":       _i(r.get("seg_vol_declarado")),
+            "ST":            st_v,
+            "ST_Pond":       st_p,
+            "Diferencia_ST": (round(st_v - st_p, 3) if st_v is not None and st_p is not None else None),
+            "IC":            ic_v,
+            "IC_Pond":       ic_p,
+            "Diferencia_IC": (round(ic_v - ic_p, 4) if ic_v is not None and ic_p is not None else None),
+        })
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Ruta", "Placa", "Conductor", "Volumen",
+        "ST", "ST_Pond", "Diferencia_ST",
+        "IC", "IC_Pond", "Diferencia_IC",
+    ])
+
+
+def _df_acomp_detalles(df_acomp: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataFrame:
+    """Hoja Acomp_Detalles — aplana muestras_json con misma estructura que Detalle_Estaciones."""
+    rows = []
+    for _, r in df_acomp.iterrows():
+        muestras = _parse_json_list(r.get("muestras_json"))
+        if not muestras:
+            continue
+        fecha   = _s(r.get("fecha"))
+        ruta    = _s(r.get("ruta"))
+        placa   = _s(r.get("placa"))
+        respo   = _s(r.get("seg_responsable"))
+        vol_dec = _i(r.get("seg_vol_declarado"))
+        for m in muestras:
+            cod = _s(m.get("ID") or m.get("_id_muestra"))
+            rows.append({
+                "Fecha":             fecha,
+                "Ruta":              ruta,
+                "Placa":             placa,
+                "Conductor":         respo,
+                "Volumen_Declarado": vol_dec,
+                "Codigo_Estacion":   cod,
+                "Nombre_Estacion":   cat_map.get(cod, ""),
+                "Grasa":             _f(m.get("_grasa")),
+                "Solidos_Totales":   _f(m.get("_st")),
+                "Proteina":          _f(m.get("_proteina")),
+                "Crioscopia":        _f(m.get("_ic")),
+                "%Agua":             _f(m.get("_agua")),
+                "Volumen_Estacion":  _i(m.get("_volumen")),
+                "Alcohol":           _s(m.get("_alcohol")),
+                "Cloruros":          _s(m.get("_cloruros")),
+                "Neutralizantes":    _s(m.get("_neutralizantes")),
+                "Observaciones":     _s(m.get("_obs")),
+            })
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Ruta", "Placa", "Conductor", "Volumen_Declarado",
+        "Codigo_Estacion", "Nombre_Estacion",
+        "Grasa", "Solidos_Totales", "Proteina", "Crioscopia", "%Agua",
+        "Volumen_Estacion", "Alcohol", "Cloruros", "Neutralizantes", "Observaciones",
+    ])
+
+
+def _df_contramuestras(df_cm: pd.DataFrame, cat_map: dict[str, str]) -> pd.DataFrame:
+    """Hoja Contramuestras — aplana cada muestra de cada contramuestra."""
+    rows = []
+    for _, r in df_cm.iterrows():
+        muestras = _parse_json_list(r.get("muestras_json"))
+        fecha     = _s(r.get("fecha"))
+        ruta      = _s(r.get("ruta"))
+        seg_cod   = _s(r.get("seg_codigo"))
+        quien     = _s(r.get("seg_quien_trajo"))
+        respo     = _s(r.get("seg_responsable"))
+        guardado  = _s(r.get("guardado_en"))
+        if not muestras:
+            # Mantener registro aunque no tenga muestras detalle
+            rows.append({
+                "Fecha":           fecha,
+                "Codigo_Registro": seg_cod,
+                "Ruta":            ruta,
+                "Entregado_Por":   quien,
+                "Responsable":     respo,
+                "Codigo_Muestra":  "",
+                "Nombre_Estacion": "",
+                "Grasa":           None,
+                "ST":              None,
+                "Proteina":        None,
+                "IC":              None,
+                "%Agua":           None,
+                "Alcohol":         "",
+                "Cloruros":        "",
+                "Neutralizantes":  "",
+                "Observaciones":   "",
+                "Guardado_En":     guardado,
+            })
+            continue
+        for m in muestras:
+            cod = _s(m.get("ID") or m.get("_id_muestra"))
+            rows.append({
+                "Fecha":           fecha,
+                "Codigo_Registro": seg_cod,
+                "Ruta":            ruta,
+                "Entregado_Por":   quien,
+                "Responsable":     respo,
+                "Codigo_Muestra":  cod,
+                "Nombre_Estacion": cat_map.get(cod, ""),
+                "Grasa":           _f(m.get("_grasa")),
+                "ST":              _f(m.get("_st")),
+                "Proteina":        _f(m.get("_proteina")),
+                "IC":              _f(m.get("_ic")),
+                "%Agua":           _f(m.get("_agua")),
+                "Alcohol":         _s(m.get("_alcohol")),
+                "Cloruros":        _s(m.get("_cloruros")),
+                "Neutralizantes":  _s(m.get("_neutralizantes")),
+                "Observaciones":   _s(m.get("_obs")),
+                "Guardado_En":     guardado,
+            })
+    return pd.DataFrame(rows, columns=[
+        "Fecha", "Codigo_Registro", "Ruta", "Entregado_Por", "Responsable",
+        "Codigo_Muestra", "Nombre_Estacion",
+        "Grasa", "ST", "Proteina", "IC", "%Agua",
+        "Alcohol", "Cloruros", "Neutralizantes", "Observaciones", "Guardado_En",
+    ])
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Función pública
+# ─────────────────────────────────────────────────────────────────────
 def historial_to_excel_filtrado(
     df_filtrado: pd.DataFrame,
     fecha_desde,
@@ -16,300 +434,113 @@ def historial_to_excel_filtrado(
     filtro_tipo: str,
     filtro_subtipo: str = "TODOS",
 ) -> bytes:
-    """Excel multi-hoja respetando los filtros del Historial."""
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active)
+    """Genera un Excel contextual según el tipo de registro consultado.
 
-    fill_hdr = PatternFill("solid", fgColor="1F4E79")
-    fill_bad = PatternFill("solid", fgColor="FFC7CE")
-    fill_alt = PatternFill("solid", fgColor="EEF4FB")
-    font_hdr = Font(bold=True, size=10, color="FFFFFF")
-    font_bad = Font(bold=True, size=10, color="9C0006")
-    normal   = Font(size=10)
-    center   = Alignment(horizontal="center", vertical="center")
-    bd = Border(
-        left=Side(style="thin"), right=Side(style="thin"),
-        top=Side(style="thin"), bottom=Side(style="thin"),
-    )
+    Args:
+        df_filtrado: DataFrame ya filtrado por la UI (lo que el usuario ve).
+        fecha_desde/fecha_hasta: rango de fechas activo (solo se usa si
+            filtro_tipo='SEGUIMIENTOS' y df_filtrado no contiene seguimientos).
+        filtro_tipo: 'RUTAS' | 'TRANSUIZA' | 'SEGUIMIENTOS' | 'TODOS'.
+        filtro_subtipo: dentro de SEGUIMIENTOS — 'ESTACIONES' |
+            'ACOMPAÑAMIENTOS' | 'CONTRAMUESTRAS' | 'TODOS'.
 
-    def _wh(ws, cols, widths):
-        for ci, hdr in enumerate(cols, 1):
-            c = ws.cell(row=1, column=ci, value=hdr)
-            c.fill = fill_hdr; c.font = font_hdr
-            c.alignment = center; c.border = bd
-        for ci, w in enumerate(widths, 1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = w
-        ws.row_dimensions[1].height = 20
+    Returns:
+        Bytes del .xlsx listo para st.download_button.
+    """
+    if df_filtrado is None:
+        df_filtrado = pd.DataFrame()
 
-    def _wc(ws, ri, ci, val, fmt=None, bad=False, alt=False):
-        v = val if (val is not None and not (isinstance(val, float) and pd.isna(val))) else ""
-        c = ws.cell(row=ri, column=ci, value=v)
-        c.alignment = center; c.border = bd
-        if bad:
-            c.font = font_bad; c.fill = fill_bad
-        else:
-            c.font = normal
-            if alt: c.fill = fill_alt
-        if fmt: c.number_format = fmt
+    filtro_tipo = (filtro_tipo or "TODOS").upper()
+    filtro_subtipo = (filtro_subtipo or "TODOS").upper()
 
-    if filtro_tipo in ("TODOS", "RUTAS"):
-        df_r = (df_filtrado[df_filtrado["tipo_seguimiento"] == "RUTAS"].copy()
-                if "tipo_seguimiento" in df_filtrado.columns else df_filtrado.copy())
-        ws1 = wb.create_sheet("RUTAS")
-        cols1 = [
-            ("TIPO", "tipo_seguimiento"), ("FECHA", "fecha"), ("RUTA", "ruta"),
-            ("PLACA", "placa"), ("CONDUCTOR", "conductor"),
-            ("VOLUMEN (L)", "volumen_declarado"),
-            ("VOL. ESTACIONES (L)", "vol_estaciones"),
-            ("DIFERENCIA (L)", "diferencia"),
-            ("SÓLIDOS RUTA (%)", "solidos_ruta"),
-            ("ST POND", "st_pond"),
-            ("CRIOSCOPIA RUTA (°C)", "crioscopia_ruta"),
-            ("IC POND", "ic_pond"),
-            ("Nº ESTACIONES", "num_estaciones"), ("GUARDADO EN", "guardado_en"),
-        ]
-        _wh(ws1, [h for h, _ in cols1],
-            [10, 12, 18, 10, 18, 14, 18, 12, 16, 10, 18, 10, 12, 18])
-        for ri, row in enumerate(df_r.itertuples(index=False), start=2):
-            rd = row._asdict()
-            desv_st = desv_ic = False
-            try:
-                v = float(str(rd.get("solidos_ruta","")).replace(",","."))
-                if 0 < v < 12.60: desv_st = True
-            except Exception: pass
-            try:
-                v = float(str(rd.get("crioscopia_ruta","")).replace(",","."))
-                if v > -0.535: desv_ic = True
-            except Exception: pass
-            alt = (ri % 2 == 0)
-            for ci, (_, col) in enumerate(cols1, 1):
-                fmt = "0.00"  if col in ("solidos_ruta","st_pond") else \
-                      "0.000" if col in ("crioscopia_ruta","ic_pond") else None
-                bad = ((desv_st or desv_ic) and col == "ruta") or \
-                      (desv_st and col == "solidos_ruta")          or \
-                      (desv_st and col == "st_pond")               or \
-                      (desv_ic and col == "crioscopia_ruta")       or \
-                      (desv_ic and col == "ic_pond")
-                _wc(ws1, ri, ci, rd.get(col,""), fmt=fmt, bad=bad, alt=alt)
+    # Catálogo (código → nombre estación) — falla silenciosa si no carga
+    try:
+        _cat = load_catalogo()
+        cat_map = dict(zip(_cat["codigo"], _cat["nombre"]))
+    except Exception:
+        cat_map = {}
 
-    if filtro_tipo in ("TODOS", "TRANSUIZA"):
-        df_t = (df_filtrado[df_filtrado["tipo_seguimiento"] == "TRANSUIZA"].copy()
-                if "tipo_seguimiento" in df_filtrado.columns else df_filtrado.copy())
-        ws2 = wb.create_sheet("TRANSUIZA")
-        cols2 = [
-            ("FECHA ANÁLISIS",       "guardado_en"),
-            ("FECHA MUESTRA",        "fecha"),
-            ("GRASA (%)",            "grasa_muestra"),
-            ("ST MUESTRA (%)",       "solidos_ruta"),
-            ("PROTEÍNA (%)",         "proteina_muestra"),
-            ("ST CARROTANQUE (%)",   "st_carrotanque"),
-            ("DIFERENCIA SÓLIDOS",   "diferencia_solidos"),
-        ]
-        _wh(ws2, [h for h, _ in cols2], [20, 16, 14, 16, 14, 20, 18])
-        for ri, row in enumerate(df_t.itertuples(index=False), start=2):
-            rd = row._asdict(); alt = (ri % 2 == 0)
-            for ci, (_, col) in enumerate(cols2, 1):
-                fmt = "0.00" if col in ("grasa_muestra", "solidos_ruta",
-                                        "proteina_muestra", "st_carrotanque",
-                                        "diferencia_solidos") else None
-                _wc(ws2, ri, ci, rd.get(col, ""), fmt=fmt, alt=alt)
+    # Subconjuntos por tipo
+    if "tipo_seguimiento" in df_filtrado.columns:
+        df_rutas  = df_filtrado[df_filtrado["tipo_seguimiento"] == "RUTAS"].copy()
+        df_trans  = df_filtrado[df_filtrado["tipo_seguimiento"] == "TRANSUIZA"].copy()
+        df_seg_in = df_filtrado[df_filtrado["tipo_seguimiento"] == "SEGUIMIENTOS"].copy()
+    else:
+        df_rutas = df_filtrado.copy()
+        df_trans = df_filtrado.copy()
+        df_seg_in = df_filtrado.copy()
 
-    if filtro_tipo in ("TODOS", "SEGUIMIENTOS"):
-        if filtro_tipo == "SEGUIMIENTOS":
-            df_seg = df_filtrado.copy()
-        else:
-            df_seg = load_seguimientos()
-            if "_fecha_dt" in df_seg.columns:
-                df_seg = df_seg[
-                    (df_seg["_fecha_dt"].dt.date >= fecha_desde) &
-                    (df_seg["_fecha_dt"].dt.date <= fecha_hasta)
-                ]
-        if filtro_subtipo != "TODOS" and "sub_tipo_seguimiento" in df_seg.columns:
-            df_seg = df_seg[df_seg["sub_tipo_seguimiento"] == filtro_subtipo]
-        df_seg = df_seg.drop(columns=["_fecha_dt","_estado"], errors="ignore")
-        ws3 = wb.create_sheet("SEGUIMIENTOS")
-        cols3 = [
-            ("SUB-TIPO","sub_tipo_seguimiento"), ("FECHA","fecha"),
-            ("CÓDIGO","seg_codigo"), ("ENTREGADO POR","seg_quien_trajo"),
-            ("RUTA","ruta"), ("RESPONSABLE","seg_responsable"),
-            ("ID MUESTRA","seg_id_muestra"), ("GRASA (%)","seg_grasa"),
-            ("ST (%)","seg_st"), ("IC (°C)","seg_ic"), ("AGUA (%)","seg_agua"),
-            ("ALCOHOL","seg_alcohol"), ("CLORUROS","seg_cloruros"),
-            ("NEUTRALIZANTES","seg_neutralizantes"),
-            ("OBSERVACIONES","seg_observaciones"), ("GUARDADO EN","guardado_en"),
-        ]
-        _wh(ws3, [h for h, _ in cols3],
-            [18, 12, 12, 18, 16, 18, 14, 10, 10, 10, 10, 12, 12, 16, 30, 18])
-        for ri, row in enumerate(df_seg.itertuples(index=False), start=2):
-            rd = row._asdict(); alt = (ri % 2 == 0)
-            for ci, (_, col) in enumerate(cols3, 1):
-                fmt = "0.00"  if col in ("seg_grasa","seg_st","seg_agua") else \
-                      "0.000" if col == "seg_ic" else None
-                _wc(ws3, ri, ci, rd.get(col,""), fmt=fmt, alt=alt)
+    # Para SEGUIMIENTOS, df_filtrado puede venir de la vista de seguimientos
+    # (no incluye tipo_seguimiento). En ese caso usamos el df tal cual.
+    if filtro_tipo == "SEGUIMIENTOS" and df_seg_in.empty and not df_filtrado.empty:
+        df_seg_in = df_filtrado.copy()
 
-    if filtro_tipo in ("TODOS", "RUTAS"):
-        df_re = (df_filtrado[df_filtrado["tipo_seguimiento"] == "RUTAS"].copy()
-                 if "tipo_seguimiento" in df_filtrado.columns else df_filtrado.copy())
-        ws4 = wb.create_sheet("ESTACIONES")
-        hdrs4 = [
-            "FECHA","RUTA","PLACA","CONDUCTOR","VOL. DECLARADO (L)",
-            "# ESTACIÓN","CÓDIGO","GRASA (%)","SÓL.TOT. (%)","PROTEÍNA (%)",
-            "CRIOSCOPIA (°C)","VOLUMEN (L)","ALCOHOL","CLORUROS","NEUTRALIZANTES",
-            "% AGUA","OBSERVACIONES","ST RUTA (%)","IC RUTA (°C)","ESTADO CALIDAD",
-        ]
-        _wh(ws4, hdrs4,
-            [12,18,10,18,16,10,14,10,10,10,14,12,10,10,14,9,26,12,12,14])
-        est_ri = 2
-        for _, ruta_row in df_re.iterrows():
-            raw_json = str(ruta_row.get("estaciones_json","") or "")
-            try: ests = json.loads(raw_json) if raw_json.strip() else []
-            except Exception: ests = []
-            if not ests: continue
-            try: st_rv = float(str(ruta_row.get("solidos_ruta","")).replace(",","."))
-            except Exception: st_rv = None
-            try: ic_rv = float(str(ruta_row.get("crioscopia_ruta","")).replace(",","."))
-            except Exception: ic_rv = None
-            desv_st_r = st_rv is not None and 0 < st_rv < 12.60
-            desv_ic_r = ic_rv is not None and ic_rv > -0.535
-            estado_r  = "DESVIACIÓN" if (desv_st_r or desv_ic_r) else "CONFORME"
-
-            for idx_e, est in enumerate(ests, 1):
-                try:
-                    st_e = float(str(est.get("solidos","")).replace(",","."))
-                    desv_st_e = 0 < st_e < 12.60
-                except Exception:
-                    st_e = None; desv_st_e = False
-                try:
-                    ic_e = float(str(est.get("crioscopia","")).replace(",","."))
-                    desv_ic_e = ic_e > -0.530
-                except Exception:
-                    ic_e = None; desv_ic_e = False
-                agua_raw = est.get("agua_pct", "")
-                desv_agua_e = False
-                try:
-                    agua_v = float(str(agua_raw).replace(",",".").replace("+",""))
-                    if agua_v > 0: desv_agua_e = True
-                except Exception:
-                    if str(agua_raw).strip() in ("+", "SI", "si", "sí", "SÍ"): desv_agua_e = True
-
-                row_vals = [
-                    ruta_row.get("fecha",""), ruta_row.get("ruta",""),
-                    ruta_row.get("placa",""), ruta_row.get("conductor",""),
-                    ruta_row.get("volumen_declarado",""), idx_e,
-                    est.get("codigo",""), est.get("grasa"),
-                    est.get("solidos"), est.get("proteina"),
-                    est.get("crioscopia"), est.get("volumen"),
-                    est.get("alcohol",""), est.get("cloruros",""),
-                    est.get("neutralizantes",""), agua_raw,
-                    est.get("obs",""), st_rv, ic_rv, estado_r,
-                ]
-                fmts = [None,None,None,None,"#,##0","0",None,
-                        "0.00","0.00","0.00","0.000","#,##0",
-                        None,None,None,"0.0",None,"0.00","0.000",None]
-                alt = (est_ri % 2 == 0)
-                for ci_e, (val_e, fmt_e) in enumerate(zip(row_vals, fmts), 1):
-                    bad_e = (
-                        (ci_e == 2  and (desv_st_e or desv_ic_e or desv_agua_e)) or
-                        (ci_e == 7  and (desv_st_e or desv_ic_e or desv_agua_e)) or
-                        (ci_e == 9  and desv_st_e)    or
-                        (ci_e == 11 and desv_ic_e)    or
-                        (ci_e == 16 and desv_agua_e)
-                    )
-                    _wc(ws4, est_ri, ci_e, val_e, fmt=fmt_e, bad=bad_e, alt=alt)
-                est_ri += 1
-
-    if filtro_tipo in ("TODOS", "SEGUIMIENTOS"):
-        if filtro_tipo == "SEGUIMIENTOS":
-            df_acomp_xl = df_filtrado.copy()
-        else:
-            df_acomp_xl = load_seguimientos()
-            if "_fecha_dt" in df_acomp_xl.columns:
-                df_acomp_xl = df_acomp_xl[
-                    (df_acomp_xl["_fecha_dt"].dt.date >= fecha_desde) &
-                    (df_acomp_xl["_fecha_dt"].dt.date <= fecha_hasta)
-                ]
-        df_acomp_xl = (
-            df_acomp_xl[df_acomp_xl.get("sub_tipo_seguimiento", pd.Series(dtype=str)) == "ACOMPAÑAMIENTOS"]
-            if "sub_tipo_seguimiento" in df_acomp_xl.columns else pd.DataFrame()
-        )
-        if not df_acomp_xl.empty:
-            try:
-                _cat_xl = load_catalogo()
-                _cat_xl_map = dict(zip(_cat_xl["codigo"], _cat_xl["nombre"]))
-            except Exception:
-                _cat_xl_map = {}
-            ws5 = wb.create_sheet("ACOMPAÑAMIENTOS")
-            hdrs5 = [
-                "FECHA","RUTA","ENTREGADO POR","RESPONSABLE",
-                "VOL. DECLARADO (L)","VOL. SUMA MUESTRAS (L)","DIFERENCIA (L)",
-                "ST RUTA (%)","IC RUTA (°C)","ST PONDERADO (%)","IC PONDERADO (°C)",
-                "# MUESTRA","CÓDIGO","NOMBRE ESTACIÓN","VOLUMEN (L)",
-                "GRASA (%)","ST (%)","PROTEÍNA (%)","IC (°C)","AGUA (%)","POND ST","IC POND",
-                "ALCOHOL","CLORUROS","NEUTRALIZANTES","OBSERVACIONES","GUARDADO EN",
+    # Cargar seguimientos completos solo si hace falta
+    def _load_seg_filtrado() -> pd.DataFrame:
+        try:
+            df = load_seguimientos()
+        except Exception:
+            return pd.DataFrame()
+        if "_fecha_dt" in df.columns and fecha_desde and fecha_hasta:
+            df = df[
+                (df["_fecha_dt"].dt.date >= fecha_desde)
+                & (df["_fecha_dt"].dt.date <= fecha_hasta)
             ]
-            widths5 = [12,18,18,18,16,18,14,12,14,14,14,10,14,20,10,10,10,10,10,10,10,10,10,10,14,30,18]
-            _wh(ws5, hdrs5, widths5)
-            _am_ri = 2
-            for _, _arow in df_acomp_xl.iterrows():
-                _raw_mj = str(_arow.get("muestras_json","") or "")
-                try: _muestras_xl = json.loads(_raw_mj) if _raw_mj.strip() else []
-                except Exception: _muestras_xl = []
-                def _pnxl(x):
-                    try: return float(str(x).replace(",","."))
-                    except: return None
-                try: _st_rv = float(str(_arow.get("seg_solidos_ruta","")).replace(",","."))
-                except: _st_rv = None
-                try: _ic_rv = float(str(_arow.get("seg_crioscopia_ruta","")).replace(",","."))
-                except: _ic_rv = None
-                try: _st_pv = float(str(_arow.get("seg_st_pond","")).replace(",","."))
-                except: _st_pv = None
-                try: _ic_pv = float(str(_arow.get("seg_ic_pond","")).replace(",","."))
-                except: _ic_pv = None
-                try: _vol_decl_xl = int(float(str(_arow.get("seg_vol_declarado","")).replace(",",".")))
-                except: _vol_decl_xl = None
-                try: _vol_sum_xl  = int(float(str(_arow.get("seg_vol_muestras","")).replace(",",".")))
-                except: _vol_sum_xl = None
-                try: _dif_xl = int(float(str(_arow.get("seg_diferencia_vol","")).replace(",",".")))
-                except: _dif_xl = None
-                _common5 = [
-                    _arow.get("fecha",""), _arow.get("ruta",""),
-                    _arow.get("seg_quien_trajo",""), _arow.get("seg_responsable",""),
-                    _vol_decl_xl, _vol_sum_xl, _dif_xl,
-                    _st_rv, _ic_rv, _st_pv, _ic_pv,
-                ]
-                _alt5 = (_am_ri % 2 == 0)
-                if not _muestras_xl:
-                    for _ci5, _v5 in enumerate(_common5 + ["—"]*14 + [_arow.get("guardado_en","")], 1):
-                        _wc(ws5, _am_ri, _ci5, _v5, alt=_alt5)
-                    _am_ri += 1
-                    continue
-                for _idx5, _am5 in enumerate(_muestras_xl, 1):
-                    _cod5 = str(_am5.get("ID","") or "").strip()
-                    _vol5 = _pnxl(_am5.get("_volumen"))
-                    _st5  = _pnxl(_am5.get("_st"))
-                    _ic5  = _pnxl(_am5.get("_ic"))
-                    _pst5 = round(_vol5 * _st5, 2) if _vol5 is not None and _st5 is not None else None
-                    _pic5 = round(_vol5 * _ic5, 3) if _vol5 is not None and _ic5 is not None else None
-                    _row5 = _common5 + [
-                        _idx5, _cod5, _cat_xl_map.get(_cod5,""),
-                        int(_vol5) if _vol5 is not None else None,
-                        _pnxl(_am5.get("_grasa")), _st5, _pnxl(_am5.get("_proteina")), _ic5,
-                        _pnxl(_am5.get("_agua")), _pst5, _pic5,
-                        _am5.get("_alcohol",""), _am5.get("_cloruros",""),
-                        _am5.get("_neutralizantes",""), _am5.get("_obs",""),
-                        _arow.get("guardado_en",""),
-                    ]
-                    _alt5 = (_am_ri % 2 == 0)
-                    for _ci5, _v5 in enumerate(_row5, 1):
-                        _hdr5 = hdrs5[_ci5-1]
-                        _fmt5 = "0.00"  if _hdr5 in ("ST RUTA (%)","ST PONDERADO (%)","GRASA (%)","ST (%)","PROTEÍNA (%)","AGUA (%)","POND ST") else \
-                                "0.000" if _hdr5 in ("IC RUTA (°C)","IC PONDERADO (°C)","IC (°C)","IC POND") else None
-                        _wc(ws5, _am_ri, _ci5, _v5, fmt=_fmt5, alt=_alt5)
-                    _am_ri += 1
+        return df.drop(columns=["_fecha_dt", "_estado"], errors="ignore")
 
-    if not wb.sheetnames:
-        wb.create_sheet("Sin datos")
+    if filtro_tipo == "TODOS" and df_seg_in.empty:
+        df_seg_in = _load_seg_filtrado()
+
+    # ── Construcción de hojas ─────────────────────────────────────────
+    sheets: dict[str, pd.DataFrame] = {}
+
+    if filtro_tipo in ("RUTAS", "TODOS") and not df_rutas.empty:
+        sheets["General_Rutas"]      = _df_general_rutas(df_rutas)
+        det_est = _df_detalle_estaciones(df_rutas, cat_map)
+        if not det_est.empty:
+            sheets["Detalle_Estaciones"] = det_est
+
+    if filtro_tipo in ("TRANSUIZA", "TODOS") and not df_trans.empty:
+        sheets["Transuiza"] = _df_transuiza(df_trans)
+
+    if filtro_tipo in ("SEGUIMIENTOS", "TODOS") and not df_seg_in.empty:
+        sub = "sub_tipo_seguimiento"
+        if sub in df_seg_in.columns:
+            df_est   = df_seg_in[df_seg_in[sub] == "ESTACIONES"].copy()
+            df_acomp = df_seg_in[df_seg_in[sub] == "ACOMPAÑAMIENTOS"].copy()
+            df_cm    = df_seg_in[df_seg_in[sub] == "CONTRAMUESTRAS"].copy()
+        else:
+            df_est = df_acomp = df_cm = df_seg_in.copy()
+
+        # Filtro_subtipo restringe SOLO si filtro_tipo=SEGUIMIENTOS
+        if filtro_tipo == "SEGUIMIENTOS" and filtro_subtipo != "TODOS":
+            if filtro_subtipo == "ESTACIONES":
+                df_acomp = df_acomp.iloc[0:0]; df_cm = df_cm.iloc[0:0]
+            elif filtro_subtipo == "ACOMPAÑAMIENTOS":
+                df_est = df_est.iloc[0:0]; df_cm = df_cm.iloc[0:0]
+            elif filtro_subtipo == "CONTRAMUESTRAS":
+                df_est = df_est.iloc[0:0]; df_acomp = df_acomp.iloc[0:0]
+
+        if not df_est.empty:
+            sheets["Seg_Estaciones"] = _df_seg_estaciones(df_est)
+        if not df_acomp.empty:
+            sheets["Acomp_General"]  = _df_acomp_general(df_acomp)
+            ac_det = _df_acomp_detalles(df_acomp, cat_map)
+            if not ac_det.empty:
+                sheets["Acomp_Detalles"] = ac_det
+        if not df_cm.empty:
+            sheets["Contramuestras"] = _df_contramuestras(df_cm, cat_map)
+
+    if not sheets:
+        sheets["Sin_datos"] = pd.DataFrame({"Mensaje": ["No hay registros para exportar con los filtros actuales."]})
+
+    # ── Escritura del archivo ─────────────────────────────────────────
     buf = io.BytesIO()
-    wb.save(buf)
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for name, df in sheets.items():
+            df.to_excel(writer, sheet_name=name[:31], index=False)
+            ws = writer.sheets[name[:31]]
+            _apply_sheet_styling(ws, df)
+
     buf.seek(0)
     return buf.read()

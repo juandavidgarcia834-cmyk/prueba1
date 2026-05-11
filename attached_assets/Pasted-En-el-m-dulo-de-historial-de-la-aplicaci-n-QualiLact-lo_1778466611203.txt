@@ -1,0 +1,47 @@
+En el módulo de historial de la aplicación QualiLact, los usuarios visualizan diferentes tipos de registros operativos: Rutas, Transuiza y Seguimientos (con sus respectivos subtipos: Estaciones, Acompañamientos y Contramuestras). Necesitamos una herramienta de exportación a Excel en utils/excel_utils.py que sea estrictamente contextual.
+
+Objetivo:
+Implementar botones de descarga de Excel que generen estructuras tabulares diferentes dependiendo del tipo de registro que el usuario esté consultando.
+
+⚠️ REGLAS ESTRICTAS (CRÍTICO):
+
+Una columna por dato: Estructura estrictamente tabular (Sábana de datos).
+
+Cero celdas combinadas (No merged cells).
+
+Tipos de datos: Los parámetros de calidad (Sólidos, Proteína, Grasa, Volumen, Diferencias) deben exportarse como números (float), no como texto. Crioscopía debe mantener su formato -0.xxx pero ser reconocible numéricamente.
+
+Plan de Acción y Estructuras Requeridas:
+
+Implementa una función generadora de Excel que evalúe el tipo de registro y construya el archivo con las siguientes hojas y columnas exactas:
+
+1. EXPORTACIÓN DE RUTAS (Debe generar 2 hojas en el mismo archivo):
+
+Hoja 1 (Nombre: 'General_Rutas'): Fecha | Ruta | Placa | Conductor | Volumen | ST | ST_Pond | Diferencia_ST | IC | IC_Pond | Diferencia_IC
+
+Hoja 2 (Nombre: 'Detalle_Estaciones'): Fecha | Ruta | Placa | Conductor | Volumen_Declarado | Codigo_Estacion | Nombre_Estacion | Grasa | Solidos_Totales | Proteina | Crioscopia | %Agua | Volumen_Estacion | Alcohol | Cloruros | Neutralizantes | Observaciones
+(Nota para Hoja 2: Debe aplanar la data, repitiendo la Fecha, Ruta, Placa y Conductor por cada estación iterada para no perder el contexto relacional).
+
+2. EXPORTACIÓN DE TRANSUIZA (Debe generar 1 hoja):
+
+Hoja 1 (Nombre: 'Transuiza'): Fecha | Placa | ST_Carrotanque | Grasa | ST_Contramuestra | Proteina | Diferencia_ST_Carr_Contra
+
+3. EXPORTACIÓN DE SEGUIMIENTOS (Debe evaluar el subtipo activo):
+
+Si el subtipo es 'Estaciones' (1 Hoja - 'Seg_Estaciones'): Todos los datos aplanados: Codigo_Estacion | Fecha | Grasa | ST | Proteina | IC | %Agua | (y demás parámetros guardados).
+
+Si el subtipo es 'Acompañamientos' (2 Hojas - Igual a Rutas): >   - Hoja 1 ('Acomp_General'): Mismas columnas de la hoja 1 de Rutas, pero usando los datos específicos del acompañamiento.
+
+Hoja 2 ('Acomp_Detalles'): Mismas columnas de la hoja 2 de Rutas.
+
+Si el subtipo es 'Contramuestras' (1 Hoja - 'Contramuestras'): Todas las columnas de la base de datos correspondientes a contramuestras aplanadas en una sola tabla.
+
+Instrucciones Técnicas:
+
+Utiliza pd.ExcelWriter(buffer, engine='xlsxwriter') (o openpyxl) para poder crear múltiples hojas (sheet_name) dentro del mismo archivo .xlsx.
+
+Aplica "Freeze Panes" en la fila 1 de todas las hojas para congelar los encabezados.
+
+Enlaza esta lógica a botones st.download_button en la UI del historial, asegurando que solo se exporten los datos filtrados actualmente en pantalla.
+
+Realiza la implementación verificando las llaves (keys) actuales de los diccionarios de datos que provienen de Supabase.
